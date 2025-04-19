@@ -100,12 +100,20 @@ backToLobbyButton.className = 'btn btn-info';
 backToLobbyButton.textContent = 'Back to Lobby';
 backToLobbyButton.style.display = 'none';
 
+// Disconnect button
+const disconnectButton = document.createElement('button');
+disconnectButton.id = 'btn-disconnect';
+disconnectButton.className = 'btn btn-danger';
+disconnectButton.textContent = 'Disconnect';
+disconnectButton.style.display = 'none';
+
 // Add the new buttons to the controls section
 const controlsSection = document.querySelector('.controls');
 controlsSection.appendChild(readyButton);
 controlsSection.appendChild(foldButton);
 controlsSection.appendChild(changePlayerButton);
 controlsSection.appendChild(backToLobbyButton);
+controlsSection.appendChild(disconnectButton);
 
 // Display game ID
 gameIdElement.textContent = gameId;
@@ -293,6 +301,49 @@ backToLobbyButton.addEventListener('click', () => {
     returnToLobby();
 });
 
+// Disconnect button
+disconnectButton.addEventListener('click', () => {
+    if (confirm('Are you sure you want to disconnect from the game?')) {
+        disconnectPlayer();
+        
+        // Show a message to let the user know they've been disconnected
+        alert('You have been disconnected from the game');
+        
+        // Update UI to show disconnected state
+        statusElement.textContent = "You are disconnected. Choose a player to reconnect.";
+        
+        // Return to lobby
+        returnToLobby();
+    }
+});
+
+// Disconnect player function
+function disconnectPlayer() {
+    // Remove player connection marker
+    if (playerRole === 1) {
+        localStorage.removeItem('durakPlayer1LastActive');
+        localStorage.removeItem('durakPlayer1Ready');
+        player1Connected = false;
+        player1Ready = false;
+    } else if (playerRole === 2) {
+        localStorage.removeItem('durakPlayer2LastActive');
+        localStorage.removeItem('durakPlayer2Ready');
+        player2Connected = false;
+        player2Ready = false;
+    }
+    
+    // Clear player role
+    localStorage.removeItem('durakPlayerRole');
+    playerRole = null;
+    
+    // Update connection status in UI
+    checkPlayerConnections();
+    
+    // Force a sync to notify the other player
+    saveGameState();
+    syncGameState();
+}
+
 // Return to lobby function
 function returnToLobby() {
     // Hide game table, show player select
@@ -327,9 +378,10 @@ function selectPlayer() {
         showEmptyGame();
     }
     
-    // Show change player button
+    // Show player control buttons
     changePlayerButton.style.display = 'inline-block';
     backToLobbyButton.style.display = 'inline-block';
+    disconnectButton.style.display = 'inline-block';
     
     // Setup auto-sync if checked
     if (autoSyncCheckbox.checked) {
@@ -1100,20 +1152,22 @@ function toggleControls() {
     const playerNumber = playerRole === 1 ? 'player1' : 'player2';
     const isPlayerTurn = currentPlayer === playerNumber;
     
-    // Hide all buttons by default (except for change player and back to lobby)
+    // Hide all buttons by default (except for change player, disconnect and back to lobby)
     takeButton.style.display = 'none';
     doneButton.style.display = 'none';
     startButton.style.display = 'none';
     readyButton.style.display = 'none';
     foldButton.style.display = 'none';
     
-    // Always show change player and back to lobby buttons if player is connected
+    // Always show player control buttons if player is connected
     if (playerRole) {
         changePlayerButton.style.display = 'inline-block';
         backToLobbyButton.style.display = 'inline-block';
+        disconnectButton.style.display = 'inline-block';
     } else {
         changePlayerButton.style.display = 'none';
         backToLobbyButton.style.display = 'none';
+        disconnectButton.style.display = 'none';
     }
     
     // Show appropriate buttons based on game state and player turn

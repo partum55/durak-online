@@ -362,6 +362,38 @@ body {
     background-color: #17a2b8;
 }
 
+/* Style for disconnect button */
+#btn-disconnect {
+    background-color: #dc3545;
+    color: white;
+    font-weight: bold;
+}
+
+/* Make buttons more distinct with hover effects */
+#btn-disconnect:hover {
+    background-color: #bd2130;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+}
+
+#btn-change-player:hover {
+    background-color: #5a6268;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+}
+
+#btn-back-to-lobby:hover {
+    background-color: #138496;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+}
+
+/* Button layout for controls section */
+.controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: center;
+}
+
 @media (max-width: 600px) {
     .card {
         width: 60px;
@@ -399,14 +431,12 @@ body {
     }
     
     .controls {
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
+        grid-template-columns: 1fr;
     }
     
     .btn {
         width: 100%;
         max-width: 200px;
-        margin: 0;
+        margin: 0 auto;
     }
 }
