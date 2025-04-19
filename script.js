@@ -34,9 +34,16 @@ localStorage.setItem('durakGameId', gameId);
 let player1Connected = false;
 let player2Connected = false;
 
+// Used to track if we need to reconnect
+let wasDisconnected = false;
+
 // Auto-sync interval (2 seconds)
 let autoSyncInterval = null;
 const AUTO_SYNC_INTERVAL = 2000;
+
+// Connection check interval (3 seconds)
+let connectionCheckInterval = null;
+const CONNECTION_CHECK_INTERVAL = 3000;
 
 // Last sync timestamp
 let lastSyncTime = null;
@@ -108,6 +115,13 @@ disconnectButton.className = 'btn btn-danger';
 disconnectButton.textContent = 'Disconnect';
 disconnectButton.style.display = 'none';
 
+// Reconnect button
+const reconnectButton = document.createElement('button');
+reconnectButton.id = 'btn-reconnect';
+reconnectButton.className = 'btn btn-primary';
+reconnectButton.textContent = 'Reconnect';
+reconnectButton.style.display = 'none';
+
 // Add the new buttons to the controls section
 const controlsSection = document.querySelector('.controls');
 controlsSection.appendChild(readyButton);
@@ -115,6 +129,7 @@ controlsSection.appendChild(foldButton);
 controlsSection.appendChild(changePlayerButton);
 controlsSection.appendChild(backToLobbyButton);
 controlsSection.appendChild(disconnectButton);
+controlsSection.appendChild(reconnectButton);
 
 // Create "Back to Game" button for the lobby
 const backToGameButton = document.createElement('button');
@@ -123,12 +138,49 @@ backToGameButton.className = 'btn btn-success';
 backToGameButton.textContent = 'Return to Game';
 backToGameButton.style.display = 'none';
 
-// Add Back to Game button to player selection area
+// Connection status indicator for lobby
+const connectionStatusIndicator = document.createElement('div');
+connectionStatusIndicator.id = 'lobby-connection-status';
+connectionStatusIndicator.className = 'connection-indicator';
+connectionStatusIndicator.innerHTML = 'Connection Status: <span class="connection-status-text">Checking...</span>';
+
+// Add Back to Game button and connection status to player selection area
 const playerButtonsDiv = document.querySelector('.player-buttons');
 playerButtonsDiv.appendChild(backToGameButton);
+playerSelectDiv.appendChild(connectionStatusIndicator);
 
 // Display game ID
 gameIdElement.textContent = gameId;
+
+// Set up session tracking with ping mechanism
+function setupConnectionPing() {
+    // Create a unique ID for this session
+    const sessionId = Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('durakSessionId', sessionId);
+    
+    // Ping function to update last active time
+    function pingConnection() {
+        if (playerRole === 1) {
+            localStorage.setItem('durakPlayer1LastActive', new Date().getTime());
+        } else if (playerRole === 2) {
+            localStorage.setItem('durakPlayer2LastActive', new Date().getTime());
+        }
+        
+        // Also update session ID to show this is the active session
+        if (playerRole) {
+            localStorage.setItem(`durakPlayer${playerRole}SessionId`, sessionId);
+        }
+    }
+    
+    // Initial ping
+    pingConnection();
+    
+    // Set up interval for continuous pings
+    return setInterval(pingConnection, 2000);
+}
+
+// Connection ping interval
+let connectionPingInterval = null;
 
 // Show waiting area and empty game
 function showEmptyGame() {
@@ -170,36 +222,108 @@ function updateEmptyGameUI() {
     }
 }
 
+// Update the connection indicator in the lobby
+function updateConnectionIndicator() {
+    const statusText = document.querySelector('.connection-status-text');
+    if (!statusText) return;
+    
+    if (navigator.onLine) {
+        statusText.textContent = 'Connected';
+        statusText.className = 'connection-status-text connected';
+    } else {
+        statusText.textContent = 'Offline';
+        statusText.className = 'connection-status-text disconnected';
+    }
+    
+    // Also update player status
+    if (player1Connected) {
+        document.getElementById('player1-status').classList.add('player-connected');
+        document.getElementById('player1-status').classList.remove('player-disconnected');
+    } else {
+        document.getElementById('player1-status').classList.remove('player-connected');
+        document.getElementById('player1-status').classList.add('player-disconnected');
+    }
+    
+    if (player2Connected) {
+        document.getElementById('player2-status').classList.add('player-connected');
+        document.getElementById('player2-status').classList.remove('player-disconnected');
+    } else {
+        document.getElementById('player2-status').classList.remove('player-connected');
+        document.getElementById('player2-status').classList.add('player-disconnected');
+    }
+}
+
+// Listen for browser online/offline events
+window.addEventListener('online', () => {
+    updateConnectionIndicator();
+    if (wasDisconnected) {
+        reconnectPlayer();
+        wasDisconnected = false;
+    }
+});
+
+window.addEventListener('offline', () => {
+    updateConnectionIndicator();
+    wasDisconnected = true;
+    statusElement.textContent = "You are offline. Reconnect to continue playing.";
+});
+
 // Clear all ready states (useful on page refresh)
 function clearAllReadyStates() {
     localStorage.setItem('durakPlayer1Ready', 'false');
     localStorage.setItem('durakPlayer2Ready', 'false');
 }
 
-// Check if player role is saved
-const savedPlayerRole = localStorage.getItem('durakPlayerRole');
-if (savedPlayerRole) {
-    playerRole = parseInt(savedPlayerRole);
-    inLobby = false;
-    // Auto select the saved player role
-    selectPlayer();
-} else {
-    // If no player role is saved, show empty game
-    showEmptyGame();
-    gameTableDiv.style.display = 'block';
-    inLobby = true;
-    waitingForPlayers = true;
+// Initialize game state
+(function initializeGame() {
+    // Update connection indicator
+    updateConnectionIndicator();
+    
+    // Check if player role is saved
+    const savedPlayerRole = localStorage.getItem('durakPlayerRole');
+    if (savedPlayerRole) {
+        playerRole = parseInt(savedPlayerRole);
+        inLobby = false;
+        
+        // Start connection ping
+        connectionPingInterval = setupConnectionPing();
+        
+        // Auto select the saved player role
+        selectPlayer();
+    } else {
+        // If no player role is saved, show empty game
+        showEmptyGame();
+        gameTableDiv.style.display = 'block';
+        inLobby = true;
+        waitingForPlayers = true;
+    }
+    
+    // Check player connections
+    checkPlayerConnections();
+    checkActiveGame();
+    
+    // Start connection checking interval
+    startConnectionChecking();
+})();
+
+// Start connection checking
+function startConnectionChecking() {
+    // Clear any existing interval
+    if (connectionCheckInterval) {
+        clearInterval(connectionCheckInterval);
+    }
+    
+    // Check connections every 3 seconds
+    connectionCheckInterval = setInterval(() => {
+        checkPlayerConnections();
+        updateConnectionIndicator();
+        
+        // If in lobby, also check for active game
+        if (inLobby) {
+            checkActiveGame();
+        }
+    }, CONNECTION_CHECK_INTERVAL);
 }
-
-// Check player connections and active game
-checkPlayerConnections();
-checkActiveGame();
-
-// Update connections every 5 seconds
-setInterval(checkPlayerConnections, 5000);
-
-// Check for active game every 2 seconds
-setInterval(checkActiveGame, 2000);
 
 // Select player role
 playerOneButton.addEventListener('click', () => {
@@ -207,9 +331,24 @@ playerOneButton.addEventListener('click', () => {
         playerRole = 1;
         localStorage.setItem('durakPlayerRole', playerRole);
         inLobby = false;
+        
+        // Start connection ping
+        connectionPingInterval = setupConnectionPing();
+        
         selectPlayer();
     } else {
-        alert('Player 1 is already connected!');
+        const currentSessionId = localStorage.getItem('durakPlayer1SessionId');
+        const mySessionId = localStorage.getItem('durakSessionId');
+        
+        // If it's the same session, allow to continue as this player
+        if (currentSessionId === mySessionId) {
+            playerRole = 1;
+            localStorage.setItem('durakPlayerRole', playerRole);
+            inLobby = false;
+            selectPlayer();
+        } else {
+            alert('Player 1 is already connected from another window or browser!');
+        }
     }
 });
 
@@ -218,9 +357,24 @@ playerTwoButton.addEventListener('click', () => {
         playerRole = 2;
         localStorage.setItem('durakPlayerRole', playerRole);
         inLobby = false;
+        
+        // Start connection ping
+        connectionPingInterval = setupConnectionPing();
+        
         selectPlayer();
     } else {
-        alert('Player 2 is already connected!');
+        const currentSessionId = localStorage.getItem('durakPlayer2SessionId');
+        const mySessionId = localStorage.getItem('durakSessionId');
+        
+        // If it's the same session, allow to continue as this player
+        if (currentSessionId === mySessionId) {
+            playerRole = 2;
+            localStorage.setItem('durakPlayerRole', playerRole);
+            inLobby = false;
+            selectPlayer();
+        } else {
+            alert('Player 2 is already connected from another window or browser!');
+        }
     }
 });
 
@@ -232,12 +386,48 @@ backToGameButton.addEventListener('click', () => {
     if (gameState && savedRole) {
         playerRole = parseInt(savedRole);
         inLobby = false;
+        
+        // Start connection ping
+        if (!connectionPingInterval) {
+            connectionPingInterval = setupConnectionPing();
+        }
+        
         selectPlayer();
     } else {
         alert('No active game found!');
         backToGameButton.style.display = 'none';
     }
 });
+
+// Reconnect player
+reconnectButton.addEventListener('click', () => {
+    reconnectPlayer();
+});
+
+function reconnectPlayer() {
+    if (playerRole) {
+        // Update connection status
+        markPlayerAsConnected(playerRole);
+        
+        // Restart connection ping
+        if (connectionPingInterval) {
+            clearInterval(connectionPingInterval);
+        }
+        connectionPingInterval = setupConnectionPing();
+        
+        // Update UI
+        statusElement.textContent = "Reconnected! Game will resume shortly...";
+        reconnectButton.style.display = 'none';
+        
+        // Sync game state
+        syncGameState();
+        
+        // Hide reconnect button
+        reconnectButton.style.display = 'none';
+    } else {
+        statusElement.textContent = "Please select a player to connect.";
+    }
+}
 
 // Check if there's an active game to return to
 function checkActiveGame() {
@@ -255,6 +445,11 @@ function checkActiveGame() {
                 // Show which player they were
                 const roleNum = parseInt(savedRole);
                 backToGameButton.textContent = `Return to Game as Player ${roleNum}`;
+                
+                // Check if that player is still connected
+                if ((roleNum === 1 && !player1Connected) || (roleNum === 2 && !player2Connected)) {
+                    backToGameButton.textContent += " (Reconnect)";
+                }
                 
                 return true;
             }
@@ -341,16 +536,8 @@ changePlayerButton.addEventListener('click', () => {
         return;
     }
     
-    // Remove player connection
-    if (playerRole === 1) {
-        localStorage.removeItem('durakPlayer1LastActive');
-    } else if (playerRole === 2) {
-        localStorage.removeItem('durakPlayer2LastActive');
-    }
-    
-    // Clear player role
-    localStorage.removeItem('durakPlayerRole');
-    playerRole = null;
+    // Properly disconnect
+    disconnectPlayer();
     
     // Return to lobby
     returnToLobby();
@@ -386,14 +573,22 @@ disconnectButton.addEventListener('click', () => {
 
 // Disconnect player function
 function disconnectPlayer() {
+    // Stop connection ping
+    if (connectionPingInterval) {
+        clearInterval(connectionPingInterval);
+        connectionPingInterval = null;
+    }
+    
     // Remove player connection marker
     if (playerRole === 1) {
         localStorage.removeItem('durakPlayer1LastActive');
+        localStorage.removeItem('durakPlayer1SessionId');
         localStorage.removeItem('durakPlayer1Ready');
         player1Connected = false;
         player1Ready = false;
     } else if (playerRole === 2) {
         localStorage.removeItem('durakPlayer2LastActive');
+        localStorage.removeItem('durakPlayer2SessionId');
         localStorage.removeItem('durakPlayer2Ready');
         player2Connected = false;
         player2Ready = false;
@@ -454,6 +649,9 @@ function selectPlayer() {
     changePlayerButton.style.display = 'inline-block';
     backToLobbyButton.style.display = 'inline-block';
     disconnectButton.style.display = 'inline-block';
+    
+    // Hide reconnect button
+    reconnectButton.style.display = 'none';
     
     // Setup auto-sync if checked
     if (autoSyncCheckbox.checked) {
@@ -537,7 +735,7 @@ function markPlayerAsConnected(role) {
 // Check player connections
 function checkPlayerConnections() {
     const currentTime = new Date().getTime();
-    const inactiveThreshold = 60000; // 1 minute
+    const inactiveThreshold = 10000; // 10 seconds
     
     // Previous connection states
     const wasPlayer1Connected = player1Connected;
@@ -575,9 +773,21 @@ function checkPlayerConnections() {
         player2StatusGameElement.classList.add('player-disconnected');
     }
     
-    // If currently playing, keep marking as active
+    // Check if current player is connected
+    let currentlyConnected = false;
+    if (playerRole === 1 && player1Connected) currentlyConnected = true;
+    if (playerRole === 2 && player2Connected) currentlyConnected = true;
+    
+    // If currently playing and not in lobby, keep marking as active
     if (playerRole && !inLobby) {
-        markPlayerAsConnected(playerRole);
+        // If my connection was lost (but we have playerRole), show reconnect button
+        if (!currentlyConnected) {
+            reconnectButton.style.display = 'inline-block';
+            statusElement.textContent = "Connection lost. Please reconnect to continue.";
+        } else {
+            markPlayerAsConnected(playerRole);
+            reconnectButton.style.display = 'none';
+        }
     }
     
     // Update status when waiting for players
@@ -642,8 +852,13 @@ function saveGameState() {
         player2Ready: player2Ready
     };
     
-    localStorage.setItem('durakGameState', JSON.stringify(gameState));
-    localStorage.setItem('durakGameStateTimestamp', new Date().getTime());
+    try {
+        localStorage.setItem('durakGameState', JSON.stringify(gameState));
+        localStorage.setItem('durakGameStateTimestamp', new Date().getTime());
+    } catch (e) {
+        console.error("Error saving game state:", e);
+        alert("Error saving game state. Your browser storage might be full.");
+    }
 }
 
 // Load game state from localStorage
@@ -680,6 +895,16 @@ function loadGameState() {
             return true;
         } catch (e) {
             console.error("Error parsing game state:", e);
+            
+            // Attempt to recover
+            try {
+                localStorage.removeItem('durakGameState');
+                localStorage.removeItem('durakGameStateTimestamp');
+                alert("Game state was corrupted and has been reset.");
+            } catch (clearError) {
+                console.error("Could not clear corrupted state:", clearError);
+            }
+            
             return false;
         }
     }
@@ -689,32 +914,60 @@ function loadGameState() {
 
 // Sync game state
 function syncGameState() {
-    const localTimestamp = localStorage.getItem('durakGameStateTimestamp');
-    const remoteTimestamp = localStorage.getItem('durakGameStateTimestamp_remote');
-    
-    // If local is newer than remote
-    if (localTimestamp && (!remoteTimestamp || parseInt(localTimestamp) > parseInt(remoteTimestamp))) {
-        // Local is newer, save to remote
-        localStorage.setItem('durakGameStateTimestamp_remote', localTimestamp);
-        localStorage.setItem('durakGameState_remote', localStorage.getItem('durakGameState'));
-    } 
-    // If remote is newer than local
-    else if (remoteTimestamp && (!localTimestamp || parseInt(remoteTimestamp) > parseInt(localTimestamp))) {
-        // Remote is newer, save to local
-        localStorage.setItem('durakGameStateTimestamp', remoteTimestamp);
-        localStorage.setItem('durakGameState', localStorage.getItem('durakGameState_remote'));
-        loadGameState();
+    // Don't sync if offline
+    if (!navigator.onLine) {
+        lastSyncTimeElement.textContent = "Offline";
+        return;
     }
     
-    // Update last sync time
-    lastSyncTime = new Date();
-    lastSyncTimeElement.textContent = lastSyncTime.toLocaleTimeString();
-    
-    // Check player ready status
-    checkPlayerReadyStates();
-    
-    // Check if there's an active game to return to (for lobby display)
-    checkActiveGame();
+    try {
+        const localTimestamp = localStorage.getItem('durakGameStateTimestamp');
+        const remoteTimestamp = localStorage.getItem('durakGameStateTimestamp_remote');
+        
+        // Get the local game state
+        const localGameState = localStorage.getItem('durakGameState');
+        const remoteGameState = localStorage.getItem('durakGameState_remote');
+        
+        // If both states exist, compare and use the newer one
+        if (localGameState && remoteGameState) {
+            // If local is newer than remote
+            if (localTimestamp && (!remoteTimestamp || parseInt(localTimestamp) > parseInt(remoteTimestamp))) {
+                // Local is newer, save to remote
+                localStorage.setItem('durakGameStateTimestamp_remote', localTimestamp);
+                localStorage.setItem('durakGameState_remote', localGameState);
+            } 
+            // If remote is newer than local
+            else if (remoteTimestamp && (!localTimestamp || parseInt(remoteTimestamp) > parseInt(localTimestamp))) {
+                // Remote is newer, save to local
+                localStorage.setItem('durakGameStateTimestamp', remoteTimestamp);
+                localStorage.setItem('durakGameState', remoteGameState);
+                loadGameState();
+            }
+        }
+        // If only one exists, use that one
+        else if (localGameState) {
+            localStorage.setItem('durakGameState_remote', localGameState);
+            localStorage.setItem('durakGameStateTimestamp_remote', localTimestamp || new Date().getTime());
+        }
+        else if (remoteGameState) {
+            localStorage.setItem('durakGameState', remoteGameState);
+            localStorage.setItem('durakGameStateTimestamp', remoteTimestamp || new Date().getTime());
+            loadGameState();
+        }
+        
+        // Update last sync time
+        lastSyncTime = new Date();
+        lastSyncTimeElement.textContent = lastSyncTime.toLocaleTimeString();
+        
+        // Check player ready status
+        checkPlayerReadyStates();
+        
+        // Check if there's an active game to return to (for lobby display)
+        checkActiveGame();
+    } catch (e) {
+        console.error("Error syncing game state:", e);
+        lastSyncTimeElement.textContent = "Error";
+    }
 }
 
 // Reset player ready states
@@ -1247,8 +1500,20 @@ function toggleControls() {
         disconnectButton.style.display = 'none';
     }
     
+    // Check connection status
+    let currentlyConnected = false;
+    if (playerRole === 1 && player1Connected) currentlyConnected = true;
+    if (playerRole === 2 && player2Connected) currentlyConnected = true;
+    
+    // Show reconnect button if needed
+    if (playerRole && !currentlyConnected) {
+        reconnectButton.style.display = 'inline-block';
+    } else {
+        reconnectButton.style.display = 'none';
+    }
+    
     // Show appropriate buttons based on game state and player turn
-    if (gameActive) {
+    if (gameActive && currentlyConnected) {
         // Show fold button during active game
         foldButton.style.display = 'inline-block';
         
@@ -1264,14 +1529,12 @@ function toggleControls() {
                 doneButton.style.display = 'inline-block';
             }
         }
-    } else {
+    } else if (!gameActive && currentlyConnected) {
         // Show ready button when game is not active
-        if (playerRole) {
-            readyButton.style.display = 'inline-block';
-        }
+        readyButton.style.display = 'inline-block';
         
         // Show start button if game ended and needs to be restarted
-        if (playerRole && player1Connected && player2Connected) {
+        if (player1Connected && player2Connected) {
             startButton.style.display = 'inline-block';
         }
     }
@@ -1334,11 +1597,32 @@ startButton.addEventListener('click', () => {
     toggleControls();
 });
 
-// Add window closing/reloading event to mark player as disconnected
+// Cleanup when leaving the page or closing tab
 window.addEventListener('beforeunload', () => {
-    if (playerRole === 1) {
+    // Only disconnect if this is the active player
+    if (playerRole === 1 && localStorage.getItem('durakPlayer1SessionId') === localStorage.getItem('durakSessionId')) {
         localStorage.removeItem('durakPlayer1LastActive');
-    } else if (playerRole === 2) {
+        localStorage.removeItem('durakPlayer1SessionId');
+    } else if (playerRole === 2 && localStorage.getItem('durakPlayer2SessionId') === localStorage.getItem('durakSessionId')) {
         localStorage.removeItem('durakPlayer2LastActive');
+        localStorage.removeItem('durakPlayer2SessionId');
+    }
+});
+
+// Setup storage event listener to detect changes from other tabs/windows
+window.addEventListener('storage', (event) => {
+    // If game state changed from another window
+    if (event.key === 'durakGameState_remote' || event.key === 'durakGameStateTimestamp_remote') {
+        syncGameState();
+    }
+    
+    // If player connection status changed
+    if (event.key === 'durakPlayer1LastActive' || event.key === 'durakPlayer2LastActive') {
+        checkPlayerConnections();
+    }
+    
+    // If ready states changed
+    if (event.key === 'durakPlayer1Ready' || event.key === 'durakPlayer2Ready') {
+        checkPlayerReadyStates();
     }
 });

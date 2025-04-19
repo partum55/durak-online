@@ -244,6 +244,7 @@ body {
     background-color: #1a6e2d;
     border-radius: 15px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    position: relative;
 }
 
 .player-select h2 {
@@ -345,15 +346,44 @@ body {
     padding: 5px 10px;
     border-radius: 5px;
     font-weight: bold;
+    position: relative;
+    transition: all 0.3s ease;
 }
 
 .player-connected {
     background-color: #28a745;
+    animation: pulse-green 2s infinite;
 }
 
 .player-disconnected {
     background-color: #6c757d;
     opacity: 0.7;
+}
+
+/* New connection indicator */
+.connection-indicator {
+    margin-top: 15px;
+    padding: 8px 12px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+    display: inline-block;
+}
+
+.connection-status-text {
+    font-weight: bold;
+    padding: 3px 8px;
+    border-radius: 10px;
+    margin-left: 5px;
+}
+
+.connection-status-text.connected {
+    background-color: #28a745;
+    color: white;
+}
+
+.connection-status-text.disconnected {
+    background-color: #dc3545;
+    color: white;
 }
 
 /* Button styles */
@@ -385,6 +415,25 @@ body {
     font-weight: bold;
 }
 
+#btn-reconnect {
+    background-color: #28a745;
+    color: white;
+    font-weight: bold;
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+    0% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+    }
+}
+
 #btn-back-to-game {
     background-color: #28a745;
     color: white;
@@ -397,19 +446,7 @@ body {
     position: relative;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
     border: 2px solid rgba(255, 255, 255, 0.3);
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
-    }
-    70% {
-        box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
-    }
+    animation: pulse-green 2s infinite;
 }
 
 #btn-back-to-game:hover {
@@ -423,17 +460,26 @@ body {
     box-shadow: 0 3px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* Make buttons more distinct with hover effects */
-#btn-disconnect:hover {
-    background-color: #bd2130;
+/* Connection status indicator in player boxes */
+.player-status::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transition: all 0.3s;
 }
 
-#btn-change-player:hover {
-    background-color: #5a6268;
+.player-connected::after {
+    background-color: #28a745;
+    box-shadow: 0 0 5px #28a745;
 }
 
-#btn-back-to-lobby:hover {
-    background-color: #138496;
+.player-disconnected::after {
+    background-color: #dc3545;
+    box-shadow: 0 0 5px #dc3545;
 }
 
 @media (max-width: 600px) {
@@ -485,5 +531,11 @@ body {
     #btn-back-to-game {
         max-width: 200px;
         margin: 10px auto;
+    }
+    
+    .connection-indicator {
+        width: 100%;
+        box-sizing: border-box;
+        margin-bottom: 10px;
     }
 }
