@@ -164,6 +164,16 @@ body {
     color: #212529;
 }
 
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-info {
+    background-color: #17a2b8;
+    color: white;
+}
+
 .btn:hover {
     opacity: 0.9;
 }
@@ -340,6 +350,16 @@ body {
 /* Style for fold button */
 #btn-fold {
     background-color: #6c757d;
+}
+
+/* Style for change player button */
+#btn-change-player {
+    background-color: #6c757d;
+}
+
+/* Style for back to lobby button */
+#btn-back-to-lobby {
+    background-color: #17a2b8;
 }
 
 @media (max-width: 600px) {

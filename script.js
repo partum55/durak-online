@@ -15,6 +15,7 @@ let currentDefender = null;
 let currentPlayer = null;
 let gameActive = false;
 let gameStarted = false;
+let waitingForPlayers = true;
 
 // Player ready status
 let player1Ready = false;
@@ -86,20 +87,74 @@ foldButton.className = 'btn btn-danger';
 foldButton.textContent = 'Fold Cards';
 foldButton.style.display = 'none';
 
+const changePlayerButton = document.createElement('button');
+changePlayerButton.id = 'btn-change-player';
+changePlayerButton.className = 'btn btn-secondary';
+changePlayerButton.textContent = 'Change Player';
+changePlayerButton.style.display = 'none';
+
+// Back to lobby button
+const backToLobbyButton = document.createElement('button');
+backToLobbyButton.id = 'btn-back-to-lobby';
+backToLobbyButton.className = 'btn btn-info';
+backToLobbyButton.textContent = 'Back to Lobby';
+backToLobbyButton.style.display = 'none';
+
 // Add the new buttons to the controls section
 const controlsSection = document.querySelector('.controls');
 controlsSection.appendChild(readyButton);
 controlsSection.appendChild(foldButton);
+controlsSection.appendChild(changePlayerButton);
+controlsSection.appendChild(backToLobbyButton);
 
 // Display game ID
 gameIdElement.textContent = gameId;
 
-// Clear any old game states on page refresh
-window.onload = function() {
-    if (performance.navigation.type === 1) { // Page was refreshed
-        clearAllReadyStates();
+// Show waiting area and empty game
+function showEmptyGame() {
+    // Create empty deck
+    if (deck.length === 0) {
+        deck = createDeck();
+        trumpCard = deck[0];
+        trumpSuit = trumpCard.suit;
     }
-};
+    
+    // Update UI for empty game
+    updateEmptyGameUI();
+}
+
+// Update UI for empty waiting game
+function updateEmptyGameUI() {
+    // Update deck count
+    deckCountElement.textContent = deck.length;
+    
+    // Display trump card
+    displayCard(trumpCardElement, trumpCard, true);
+    
+    // Empty player hands
+    playerOneHandElement.innerHTML = '';
+    playerTwoHandElement.innerHTML = '';
+    
+    // Clear battle area
+    attackAreaElement.innerHTML = '';
+    defenseAreaElement.innerHTML = '';
+    
+    // Set waiting message
+    turnIndicatorElement.textContent = "Waiting for players";
+    
+    // Update status message based on connections
+    if (!player1Connected || !player2Connected) {
+        statusElement.textContent = "Waiting for both players to connect...";
+    } else if (!player1Ready || !player2Ready) {
+        statusElement.textContent = "Waiting for both players to be ready...";
+    }
+}
+
+// Clear all ready states (useful on page refresh)
+function clearAllReadyStates() {
+    localStorage.setItem('durakPlayer1Ready', 'false');
+    localStorage.setItem('durakPlayer2Ready', 'false');
+}
 
 // Check if player role is saved
 const savedPlayerRole = localStorage.getItem('durakPlayerRole');
@@ -107,6 +162,11 @@ if (savedPlayerRole) {
     playerRole = parseInt(savedPlayerRole);
     // Auto select the saved player role
     selectPlayer();
+} else {
+    // If no player role is saved, show empty game
+    showEmptyGame();
+    gameTableDiv.style.display = 'block';
+    waitingForPlayers = true;
 }
 
 // Check player connections
@@ -203,6 +263,47 @@ foldButton.addEventListener('click', () => {
     }
 });
 
+// Change Player button
+changePlayerButton.addEventListener('click', () => {
+    if (gameActive && !confirm('Changing player will disconnect you from the current game. Continue?')) {
+        return;
+    }
+    
+    // Remove player connection
+    if (playerRole === 1) {
+        localStorage.removeItem('durakPlayer1LastActive');
+    } else if (playerRole === 2) {
+        localStorage.removeItem('durakPlayer2LastActive');
+    }
+    
+    // Clear player role
+    localStorage.removeItem('durakPlayerRole');
+    playerRole = null;
+    
+    // Return to lobby
+    returnToLobby();
+});
+
+// Back to Lobby button
+backToLobbyButton.addEventListener('click', () => {
+    if (gameActive && !confirm('Going back to the lobby will disconnect you from the current game. Continue?')) {
+        return;
+    }
+    
+    returnToLobby();
+});
+
+// Return to lobby function
+function returnToLobby() {
+    // Hide game table, show player select
+    gameTableDiv.style.display = 'none';
+    playerSelectDiv.style.display = 'block';
+    connectionInfoDiv.classList.add('hidden');
+    
+    // Reset UI for next selection
+    checkPlayerConnections();
+}
+
 function selectPlayer() {
     // Update connection status
     markPlayerAsConnected(playerRole);
@@ -220,6 +321,15 @@ function selectPlayer() {
     
     // Check player ready states
     checkPlayerReadyStates();
+    
+    // If waiting for players and no game active, show empty game
+    if (!gameActive && waitingForPlayers) {
+        showEmptyGame();
+    }
+    
+    // Show change player button
+    changePlayerButton.style.display = 'inline-block';
+    backToLobbyButton.style.display = 'inline-block';
     
     // Setup auto-sync if checked
     if (autoSyncCheckbox.checked) {
@@ -263,6 +373,7 @@ function checkBothPlayersReady() {
     if (player1Ready && player2Ready && player1Connected && player2Connected && !gameActive && !gameStarted) {
         // Set gameStarted flag to prevent multiple initializations
         gameStarted = true;
+        waitingForPlayers = false;
         
         // Initialize game after a short delay to allow syncing
         setTimeout(() => {
@@ -270,13 +381,10 @@ function checkBothPlayersReady() {
             // Hide ready button
             readyButton.style.display = 'none';
         }, 500);
+    } else if (!gameActive) {
+        // Update the empty UI while waiting
+        updateEmptyGameUI();
     }
-}
-
-// Clear all ready states (useful on page refresh)
-function clearAllReadyStates() {
-    localStorage.setItem('durakPlayer1Ready', 'false');
-    localStorage.setItem('durakPlayer2Ready', 'false');
 }
 
 // Mark player as connected
@@ -346,6 +454,11 @@ function checkPlayerConnections() {
         markPlayerAsConnected(playerRole);
     }
     
+    // Update status when waiting for players
+    if (waitingForPlayers && !gameActive) {
+        updateEmptyGameUI();
+    }
+    
     // Check if player disconnect/reconnect affects the game
     if (gameActive) {
         if (!player1Connected || !player2Connected) {
@@ -398,6 +511,7 @@ function saveGameState() {
         currentPlayer: currentPlayer,
         gameActive: gameActive,
         gameStarted: gameStarted,
+        waitingForPlayers: waitingForPlayers,
         player1Ready: player1Ready,
         player2Ready: player2Ready
     };
@@ -425,10 +539,16 @@ function loadGameState() {
             currentPlayer = gameState.currentPlayer || null;
             gameActive = gameState.gameActive || false;
             gameStarted = gameState.gameStarted || false;
+            waitingForPlayers = gameState.waitingForPlayers !== undefined ? gameState.waitingForPlayers : true;
             player1Ready = gameState.player1Ready || false;
             player2Ready = gameState.player2Ready || false;
             
-            updateUI();
+            if (gameActive) {
+                updateUI();
+            } else if (waitingForPlayers) {
+                updateEmptyGameUI();
+            }
+            
             toggleControls();
             
             return true;
@@ -512,6 +632,7 @@ function initGame() {
     currentPlayer = currentAttacker;
     
     gameActive = true;
+    waitingForPlayers = false;
     
     // Display status message
     if (currentAttacker === 'player1') {
@@ -979,12 +1100,21 @@ function toggleControls() {
     const playerNumber = playerRole === 1 ? 'player1' : 'player2';
     const isPlayerTurn = currentPlayer === playerNumber;
     
-    // Hide all buttons by default
+    // Hide all buttons by default (except for change player and back to lobby)
     takeButton.style.display = 'none';
     doneButton.style.display = 'none';
     startButton.style.display = 'none';
     readyButton.style.display = 'none';
     foldButton.style.display = 'none';
+    
+    // Always show change player and back to lobby buttons if player is connected
+    if (playerRole) {
+        changePlayerButton.style.display = 'inline-block';
+        backToLobbyButton.style.display = 'inline-block';
+    } else {
+        changePlayerButton.style.display = 'none';
+        backToLobbyButton.style.display = 'none';
+    }
     
     // Show appropriate buttons based on game state and player turn
     if (gameActive) {
@@ -1005,7 +1135,9 @@ function toggleControls() {
         }
     } else {
         // Show ready button when game is not active
-        readyButton.style.display = 'inline-block';
+        if (playerRole) {
+            readyButton.style.display = 'inline-block';
+        }
         
         // Show start button if game ended and needs to be restarted
         if (playerRole && player1Connected && player2Connected) {
@@ -1023,6 +1155,7 @@ function checkGameEnd() {
         statusElement.textContent = "Player 1 wins! Player 2 is the durak.";
         gameActive = false;
         gameStarted = false;
+        waitingForPlayers = true;
         resetReadyStates();
         toggleControls();
         saveGameState();
@@ -1031,6 +1164,7 @@ function checkGameEnd() {
         statusElement.textContent = "Player 2 wins! Player 1 is the durak.";
         gameActive = false;
         gameStarted = false;
+        waitingForPlayers = true;
         resetReadyStates();
         toggleControls();
         saveGameState();
@@ -1062,6 +1196,7 @@ startButton.addEventListener('click', () => {
     // Reset ready states
     resetReadyStates();
     gameStarted = false;
+    waitingForPlayers = true;
     statusElement.textContent = "Waiting for both players to be ready...";
     saveGameState();
     syncGameState(); // Force sync to notify other player
