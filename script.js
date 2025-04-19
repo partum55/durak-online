@@ -35,7 +35,7 @@ let player2Connected = false;
 
 // Auto-sync interval (5 seconds)
 let autoSyncInterval = null;
-const AUTO_SYNC_INTERVAL = 5000;
+const AUTO_SYNC_INTERVAL = 2000;
 
 // Last sync timestamp
 let lastSyncTime = null;
