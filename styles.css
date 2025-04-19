@@ -128,6 +128,10 @@ body {
 
 .controls {
     margin-top: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
 }
 
 .btn {
@@ -164,6 +168,11 @@ body {
     opacity: 0.9;
 }
 
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .hidden {
     display: none;
 }
@@ -172,6 +181,9 @@ body {
     margin-top: 10px;
     font-weight: bold;
     font-size: 1.2rem;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
 }
 
 .card-back {
@@ -314,6 +326,22 @@ body {
     opacity: 0.7;
 }
 
+/* Style for ready button */
+#btn-ready {
+    background-color: #ffc107;
+    color: #212529;
+    font-weight: bold;
+}
+
+#btn-ready:disabled {
+    background-color: #28a745;
+}
+
+/* Style for fold button */
+#btn-fold {
+    background-color: #6c757d;
+}
+
 @media (max-width: 600px) {
     .card {
         width: 60px;
@@ -348,5 +376,17 @@ body {
         position: static;
         transform: none;
         margin: 10px auto;
+    }
+    
+    .controls {
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .btn {
+        width: 100%;
+        max-width: 200px;
+        margin: 0;
     }
 }

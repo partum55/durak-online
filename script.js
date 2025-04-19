@@ -15,6 +15,10 @@ let currentDefender = null;
 let currentPlayer = null;
 let gameActive = false;
 
+// Player ready status
+let player1Ready = false;
+let player2Ready = false;
+
 // Player role (1 or 2)
 let playerRole = null;
 
@@ -68,6 +72,24 @@ const startButton = document.getElementById('btn-start');
 const syncButton = document.getElementById('btn-sync');
 const autoSyncCheckbox = document.getElementById('auto-sync');
 
+// Add buttons for new features
+const readyButton = document.createElement('button');
+readyButton.id = 'btn-ready';
+readyButton.className = 'btn btn-warning';
+readyButton.textContent = 'Ready to Play';
+readyButton.style.display = 'none';
+
+const foldButton = document.createElement('button');
+foldButton.id = 'btn-fold';
+foldButton.className = 'btn btn-danger';
+foldButton.textContent = 'Fold Cards';
+foldButton.style.display = 'none';
+
+// Add the new buttons to the controls section
+const controlsSection = document.querySelector('.controls');
+controlsSection.appendChild(readyButton);
+controlsSection.appendChild(foldButton);
+
 // Display game ID
 gameIdElement.textContent = gameId;
 
@@ -118,6 +140,50 @@ autoSyncCheckbox.addEventListener('change', function() {
     }
 });
 
+// Ready button
+readyButton.addEventListener('click', () => {
+    if (playerRole === 1) {
+        player1Ready = true;
+        localStorage.setItem('durakPlayer1Ready', 'true');
+    } else if (playerRole === 2) {
+        player2Ready = true;
+        localStorage.setItem('durakPlayer2Ready', 'true');
+    }
+    
+    readyButton.disabled = true;
+    readyButton.textContent = 'Ready ✓';
+    
+    statusElement.textContent = 'Waiting for the other player to be ready...';
+    
+    // Check if both players are ready
+    checkBothPlayersReady();
+    
+    // Save game state
+    saveGameState();
+});
+
+// Fold button
+foldButton.addEventListener('click', () => {
+    if (confirm('Are you sure you want to fold your cards and forfeit the game?')) {
+        // Declare the other player as winner
+        if (playerRole === 1) {
+            statusElement.textContent = "Player 1 folded. Player 2 wins!";
+        } else {
+            statusElement.textContent = "Player 2 folded. Player 1 wins!";
+        }
+        
+        // End the game
+        gameActive = false;
+        
+        // Save the game state
+        saveGameState();
+        
+        // Update UI
+        updateUI();
+        toggleControls();
+    }
+});
+
 function selectPlayer() {
     // Update connection status
     markPlayerAsConnected(playerRole);
@@ -133,14 +199,54 @@ function selectPlayer() {
     // Load game state
     loadGameState();
     
-    // If game not active yet, initialize it
-    if (!gameActive) {
-        initGame();
-    }
+    // Check player ready states
+    checkPlayerReadyStates();
     
     // Setup auto-sync if checked
     if (autoSyncCheckbox.checked) {
         startAutoSync();
+    }
+}
+
+// Check if players are ready
+function checkPlayerReadyStates() {
+    // Get stored ready states
+    player1Ready = localStorage.getItem('durakPlayer1Ready') === 'true';
+    player2Ready = localStorage.getItem('durakPlayer2Ready') === 'true';
+    
+    // Update ready button display
+    if ((playerRole === 1 && player1Ready) || (playerRole === 2 && player2Ready)) {
+        readyButton.disabled = true;
+        readyButton.textContent = 'Ready ✓';
+    } else {
+        readyButton.disabled = false;
+        readyButton.textContent = 'Ready to Play';
+    }
+    
+    // Show ready button if game not active
+    if (!gameActive) {
+        readyButton.style.display = 'inline-block';
+    } else {
+        readyButton.style.display = 'none';
+    }
+    
+    // Check if both players are ready
+    checkBothPlayersReady();
+}
+
+// Check if both players are ready to start
+function checkBothPlayersReady() {
+    // Get fresh ready states
+    player1Ready = localStorage.getItem('durakPlayer1Ready') === 'true';
+    player2Ready = localStorage.getItem('durakPlayer2Ready') === 'true';
+    
+    // Only initialize the game if both players are ready
+    if (player1Ready && player2Ready && player1Connected && player2Connected && !gameActive) {
+        // Initialize game
+        initGame();
+        
+        // Hide ready button
+        readyButton.style.display = 'none';
     }
 }
 
@@ -206,6 +312,16 @@ function checkPlayerConnections() {
     if (playerRole) {
         markPlayerAsConnected(playerRole);
     }
+    
+    // Check if player disconnect affects the game
+    if (gameActive && (!player1Connected || !player2Connected)) {
+        statusElement.textContent = "Game paused: waiting for all players to reconnect...";
+    }
+    
+    // Check if both players are ready when they reconnect
+    if (player1Connected && player2Connected) {
+        checkBothPlayersReady();
+    }
 }
 
 // Start auto sync
@@ -242,7 +358,9 @@ function saveGameState() {
         currentAttacker: currentAttacker,
         currentDefender: currentDefender,
         currentPlayer: currentPlayer,
-        gameActive: gameActive
+        gameActive: gameActive,
+        player1Ready: player1Ready,
+        player2Ready: player2Ready
     };
     
     localStorage.setItem('durakGameState', JSON.stringify(gameState));
@@ -266,6 +384,8 @@ function loadGameState() {
         currentDefender = gameState.currentDefender;
         currentPlayer = gameState.currentPlayer;
         gameActive = gameState.gameActive;
+        player1Ready = gameState.player1Ready || false;
+        player2Ready = gameState.player2Ready || false;
         
         updateUI();
         toggleControls();
@@ -298,6 +418,22 @@ function syncGameState() {
     // Update last sync time
     lastSyncTime = new Date();
     lastSyncTimeElement.textContent = lastSyncTime.toLocaleTimeString();
+    
+    // Check player ready status
+    checkPlayerReadyStates();
+}
+
+// Reset player ready states
+function resetReadyStates() {
+    player1Ready = false;
+    player2Ready = false;
+    localStorage.setItem('durakPlayer1Ready', 'false');
+    localStorage.setItem('durakPlayer2Ready', 'false');
+    
+    // Update ready button
+    readyButton.disabled = false;
+    readyButton.textContent = 'Ready to Play';
+    readyButton.style.display = 'inline-block';
 }
 
 // Initialize the game
@@ -553,6 +689,12 @@ function updateBattleArea() {
 function handleCardClick(card) {
     if (!gameActive) return;
     
+    // Check if game is paused due to player disconnection
+    if (!player1Connected || !player2Connected) {
+        statusElement.textContent = "Cannot play: waiting for all players to reconnect...";
+        return;
+    }
+    
     // Check if it's this player's turn
     const playerNumber = playerRole === 1 ? 'player1' : 'player2';
     if (currentPlayer !== playerNumber) {
@@ -755,23 +897,36 @@ function toggleControls() {
     // Hide all buttons by default
     takeButton.style.display = 'none';
     doneButton.style.display = 'none';
+    startButton.style.display = 'none';
+    readyButton.style.display = 'none';
+    foldButton.style.display = 'none';
     
     // Show appropriate buttons based on game state and player turn
-    if (isPlayerTurn) {
-        if (currentPlayer === currentDefender && attackCards.length > defenseCards.length) {
-            // Defender's turn with attacks to defend
-            takeButton.style.display = 'inline-block';
-        }
+    if (gameActive) {
+        // Show fold button during active game
+        foldButton.style.display = 'inline-block';
         
-        if ((currentPlayer === currentAttacker && attackCards.length > 0) || 
-            (currentPlayer === currentDefender && attackCards.length === defenseCards.length)) {
-            // Attacker with cards on table or defender who defended all attacks
-            doneButton.style.display = 'inline-block';
+        if (isPlayerTurn) {
+            if (currentPlayer === currentDefender && attackCards.length > defenseCards.length) {
+                // Defender's turn with attacks to defend
+                takeButton.style.display = 'inline-block';
+            }
+            
+            if ((currentPlayer === currentAttacker && attackCards.length > 0) || 
+                (currentPlayer === currentDefender && attackCards.length === defenseCards.length)) {
+                // Attacker with cards on table or defender who defended all attacks
+                doneButton.style.display = 'inline-block';
+            }
+        }
+    } else {
+        // Show ready button when game is not active
+        readyButton.style.display = 'inline-block';
+        
+        // Show start button if game ended and needs to be restarted
+        if (playerRole && player1Connected && player2Connected) {
+            startButton.style.display = 'inline-block';
         }
     }
-    
-    // Start button - only visible when game is not active
-    startButton.style.display = gameActive ? 'none' : 'inline-block';
 }
 
 // Check if game has ended
@@ -782,9 +937,11 @@ function checkGameEnd() {
         if (playerOneHand.length === 0) {
             statusElement.textContent = "Player 1 wins! Player 2 is the durak.";
             gameActive = false;
+            resetReadyStates();
         } else if (playerTwoHand.length === 0) {
             statusElement.textContent = "Player 2 wins! Player 1 is the durak.";
             gameActive = false;
+            resetReadyStates();
         }
     }
     
@@ -804,5 +961,9 @@ doneButton.addEventListener('click', () => {
 });
 
 startButton.addEventListener('click', () => {
-    initGame();
+    // Reset ready states
+    resetReadyStates();
+    statusElement.textContent = "Waiting for both players to be ready...";
+    saveGameState();
+    toggleControls();
 });
