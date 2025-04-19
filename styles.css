@@ -128,10 +128,10 @@ body {
 
 .controls {
     margin-top: 20px;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
+    justify-content: center;
 }
 
 .btn {
@@ -141,7 +141,7 @@ body {
     border-radius: 4px;
     cursor: pointer;
     font-size: 1rem;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
 }
 
 .btn-primary {
@@ -176,11 +176,20 @@ body {
 
 .btn:hover {
     opacity: 0.9;
+    transform: translateY(-2px);
+    box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2);
+}
+
+.btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .hidden {
@@ -252,6 +261,17 @@ body {
 
 .player-buttons {
     margin: 20px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.player-buttons-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .game-info {
@@ -336,7 +356,7 @@ body {
     opacity: 0.7;
 }
 
-/* Style for ready button */
+/* Button styles */
 #btn-ready {
     background-color: #ffc107;
     color: #212529;
@@ -347,51 +367,73 @@ body {
     background-color: #28a745;
 }
 
-/* Style for fold button */
 #btn-fold {
     background-color: #6c757d;
 }
 
-/* Style for change player button */
 #btn-change-player {
     background-color: #6c757d;
 }
 
-/* Style for back to lobby button */
 #btn-back-to-lobby {
     background-color: #17a2b8;
 }
 
-/* Style for disconnect button */
 #btn-disconnect {
     background-color: #dc3545;
     color: white;
     font-weight: bold;
 }
 
+#btn-back-to-game {
+    background-color: #28a745;
+    color: white;
+    font-weight: bold;
+    font-size: 1.1rem;
+    padding: 10px 20px;
+    margin-top: 15px;
+    width: 100%;
+    max-width: 300px;
+    position: relative;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+    }
+}
+
+#btn-back-to-game:hover {
+    background-color: #218838;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+}
+
+#btn-back-to-game:active {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 4px rgba(0, 0, 0, 0.3);
+}
+
 /* Make buttons more distinct with hover effects */
 #btn-disconnect:hover {
     background-color: #bd2130;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
 }
 
 #btn-change-player:hover {
     background-color: #5a6268;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
 }
 
 #btn-back-to-lobby:hover {
     background-color: #138496;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
-}
-
-/* Button layout for controls section */
-.controls {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 10px;
-    margin-top: 20px;
-    justify-content: center;
 }
 
 @media (max-width: 600px) {
@@ -438,5 +480,10 @@ body {
         width: 100%;
         max-width: 200px;
         margin: 0 auto;
+    }
+    
+    #btn-back-to-game {
+        max-width: 200px;
+        margin: 10px auto;
     }
 }

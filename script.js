@@ -16,6 +16,7 @@ let currentPlayer = null;
 let gameActive = false;
 let gameStarted = false;
 let waitingForPlayers = true;
+let inLobby = true;
 
 // Player ready status
 let player1Ready = false;
@@ -33,7 +34,7 @@ localStorage.setItem('durakGameId', gameId);
 let player1Connected = false;
 let player2Connected = false;
 
-// Auto-sync interval (5 seconds)
+// Auto-sync interval (2 seconds)
 let autoSyncInterval = null;
 const AUTO_SYNC_INTERVAL = 2000;
 
@@ -115,6 +116,17 @@ controlsSection.appendChild(changePlayerButton);
 controlsSection.appendChild(backToLobbyButton);
 controlsSection.appendChild(disconnectButton);
 
+// Create "Back to Game" button for the lobby
+const backToGameButton = document.createElement('button');
+backToGameButton.id = 'btn-back-to-game';
+backToGameButton.className = 'btn btn-success';
+backToGameButton.textContent = 'Return to Game';
+backToGameButton.style.display = 'none';
+
+// Add Back to Game button to player selection area
+const playerButtonsDiv = document.querySelector('.player-buttons');
+playerButtonsDiv.appendChild(backToGameButton);
+
 // Display game ID
 gameIdElement.textContent = gameId;
 
@@ -168,26 +180,33 @@ function clearAllReadyStates() {
 const savedPlayerRole = localStorage.getItem('durakPlayerRole');
 if (savedPlayerRole) {
     playerRole = parseInt(savedPlayerRole);
+    inLobby = false;
     // Auto select the saved player role
     selectPlayer();
 } else {
     // If no player role is saved, show empty game
     showEmptyGame();
     gameTableDiv.style.display = 'block';
+    inLobby = true;
     waitingForPlayers = true;
 }
 
-// Check player connections
+// Check player connections and active game
 checkPlayerConnections();
+checkActiveGame();
 
 // Update connections every 5 seconds
 setInterval(checkPlayerConnections, 5000);
+
+// Check for active game every 2 seconds
+setInterval(checkActiveGame, 2000);
 
 // Select player role
 playerOneButton.addEventListener('click', () => {
     if (!player1Connected) {
         playerRole = 1;
         localStorage.setItem('durakPlayerRole', playerRole);
+        inLobby = false;
         selectPlayer();
     } else {
         alert('Player 1 is already connected!');
@@ -198,11 +217,56 @@ playerTwoButton.addEventListener('click', () => {
     if (!player2Connected) {
         playerRole = 2;
         localStorage.setItem('durakPlayerRole', playerRole);
+        inLobby = false;
         selectPlayer();
     } else {
         alert('Player 2 is already connected!');
     }
 });
+
+// Back to Game button handler
+backToGameButton.addEventListener('click', () => {
+    const gameState = localStorage.getItem('durakGameState');
+    const savedRole = localStorage.getItem('durakPlayerRole');
+    
+    if (gameState && savedRole) {
+        playerRole = parseInt(savedRole);
+        inLobby = false;
+        selectPlayer();
+    } else {
+        alert('No active game found!');
+        backToGameButton.style.display = 'none';
+    }
+});
+
+// Check if there's an active game to return to
+function checkActiveGame() {
+    const gameState = localStorage.getItem('durakGameState');
+    const savedRole = localStorage.getItem('durakPlayerRole');
+    
+    if (gameState && savedRole && inLobby) {
+        try {
+            const parsedState = JSON.parse(gameState);
+            
+            // Only show the button if there's an active game to return to
+            if (parsedState.gameActive || parsedState.waitingForPlayers) {
+                backToGameButton.style.display = 'inline-block';
+                
+                // Show which player they were
+                const roleNum = parseInt(savedRole);
+                backToGameButton.textContent = `Return to Game as Player ${roleNum}`;
+                
+                return true;
+            }
+        } catch (e) {
+            console.error("Error checking for active game:", e);
+        }
+    }
+    
+    // No active game, hide the button
+    backToGameButton.style.display = 'none';
+    return false;
+}
 
 // Sync game button
 syncButton.addEventListener('click', syncGameState);
@@ -298,6 +362,8 @@ backToLobbyButton.addEventListener('click', () => {
         return;
     }
     
+    // We keep the player role here, just go back to lobby
+    inLobby = true;
     returnToLobby();
 });
 
@@ -313,6 +379,7 @@ disconnectButton.addEventListener('click', () => {
         statusElement.textContent = "You are disconnected. Choose a player to reconnect.";
         
         // Return to lobby
+        inLobby = true;
         returnToLobby();
     }
 });
@@ -353,6 +420,11 @@ function returnToLobby() {
     
     // Reset UI for next selection
     checkPlayerConnections();
+    
+    // Check if there's an active game to return to
+    checkActiveGame();
+    
+    inLobby = true;
 }
 
 function selectPlayer() {
@@ -387,6 +459,8 @@ function selectPlayer() {
     if (autoSyncCheckbox.checked) {
         startAutoSync();
     }
+    
+    inLobby = false;
 }
 
 // Check if players are ready
@@ -502,17 +576,17 @@ function checkPlayerConnections() {
     }
     
     // If currently playing, keep marking as active
-    if (playerRole) {
+    if (playerRole && !inLobby) {
         markPlayerAsConnected(playerRole);
     }
     
     // Update status when waiting for players
-    if (waitingForPlayers && !gameActive) {
+    if (waitingForPlayers && !gameActive && !inLobby) {
         updateEmptyGameUI();
     }
     
     // Check if player disconnect/reconnect affects the game
-    if (gameActive) {
+    if (gameActive && !inLobby) {
         if (!player1Connected || !player2Connected) {
             statusElement.textContent = "Game paused: waiting for all players to reconnect...";
         } else if ((!wasPlayer1Connected || !wasPlayer2Connected) && player1Connected && player2Connected) {
@@ -521,7 +595,7 @@ function checkPlayerConnections() {
         }
     } else {
         // Check if both players are ready when they reconnect
-        if (player1Connected && player2Connected) {
+        if (player1Connected && player2Connected && !inLobby) {
             checkBothPlayersReady();
         }
     }
@@ -638,6 +712,9 @@ function syncGameState() {
     
     // Check player ready status
     checkPlayerReadyStates();
+    
+    // Check if there's an active game to return to (for lobby display)
+    checkActiveGame();
 }
 
 // Reset player ready states
