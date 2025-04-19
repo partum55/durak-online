@@ -14,6 +14,7 @@ let currentAttacker = null;
 let currentDefender = null;
 let currentPlayer = null;
 let gameActive = false;
+let gameStarted = false;
 
 // Player ready status
 let player1Ready = false;
@@ -93,6 +94,13 @@ controlsSection.appendChild(foldButton);
 // Display game ID
 gameIdElement.textContent = gameId;
 
+// Clear any old game states on page refresh
+window.onload = function() {
+    if (performance.navigation.type === 1) { // Page was refreshed
+        clearAllReadyStates();
+    }
+};
+
 // Check if player role is saved
 const savedPlayerRole = localStorage.getItem('durakPlayerRole');
 if (savedPlayerRole) {
@@ -155,15 +163,20 @@ readyButton.addEventListener('click', () => {
     
     statusElement.textContent = 'Waiting for the other player to be ready...';
     
-    // Check if both players are ready
-    checkBothPlayersReady();
-    
     // Save game state
     saveGameState();
+    
+    // Force sync to notify other player
+    syncGameState();
+    
+    // Check if both players are ready
+    checkBothPlayersReady();
 });
 
 // Fold button
 foldButton.addEventListener('click', () => {
+    if (!gameActive) return;
+    
     if (confirm('Are you sure you want to fold your cards and forfeit the game?')) {
         // Declare the other player as winner
         if (playerRole === 1) {
@@ -175,8 +188,14 @@ foldButton.addEventListener('click', () => {
         // End the game
         gameActive = false;
         
+        // Reset ready states for next game
+        resetReadyStates();
+        
         // Save the game state
         saveGameState();
+        
+        // Force sync to notify other player
+        syncGameState();
         
         // Update UI
         updateUI();
@@ -240,14 +259,24 @@ function checkBothPlayersReady() {
     player1Ready = localStorage.getItem('durakPlayer1Ready') === 'true';
     player2Ready = localStorage.getItem('durakPlayer2Ready') === 'true';
     
-    // Only initialize the game if both players are ready
-    if (player1Ready && player2Ready && player1Connected && player2Connected && !gameActive) {
-        // Initialize game
-        initGame();
+    // Only initialize the game if both players are ready and the game isn't already active
+    if (player1Ready && player2Ready && player1Connected && player2Connected && !gameActive && !gameStarted) {
+        // Set gameStarted flag to prevent multiple initializations
+        gameStarted = true;
         
-        // Hide ready button
-        readyButton.style.display = 'none';
+        // Initialize game after a short delay to allow syncing
+        setTimeout(() => {
+            initGame();
+            // Hide ready button
+            readyButton.style.display = 'none';
+        }, 500);
     }
+}
+
+// Clear all ready states (useful on page refresh)
+function clearAllReadyStates() {
+    localStorage.setItem('durakPlayer1Ready', 'false');
+    localStorage.setItem('durakPlayer2Ready', 'false');
 }
 
 // Mark player as connected
@@ -276,9 +305,13 @@ function checkPlayerConnections() {
     const currentTime = new Date().getTime();
     const inactiveThreshold = 60000; // 1 minute
     
+    // Previous connection states
+    const wasPlayer1Connected = player1Connected;
+    const wasPlayer2Connected = player2Connected;
+    
     // Check Player 1
     const player1LastActive = localStorage.getItem('durakPlayer1LastActive');
-    if (player1LastActive && (currentTime - player1LastActive) < inactiveThreshold) {
+    if (player1LastActive && (currentTime - parseInt(player1LastActive)) < inactiveThreshold) {
         player1Connected = true;
         player1StatusElement.classList.remove('player-disconnected');
         player1StatusElement.classList.add('player-connected');
@@ -294,7 +327,7 @@ function checkPlayerConnections() {
     
     // Check Player 2
     const player2LastActive = localStorage.getItem('durakPlayer2LastActive');
-    if (player2LastActive && (currentTime - player2LastActive) < inactiveThreshold) {
+    if (player2LastActive && (currentTime - parseInt(player2LastActive)) < inactiveThreshold) {
         player2Connected = true;
         player2StatusElement.classList.remove('player-disconnected');
         player2StatusElement.classList.add('player-connected');
@@ -313,14 +346,19 @@ function checkPlayerConnections() {
         markPlayerAsConnected(playerRole);
     }
     
-    // Check if player disconnect affects the game
-    if (gameActive && (!player1Connected || !player2Connected)) {
-        statusElement.textContent = "Game paused: waiting for all players to reconnect...";
-    }
-    
-    // Check if both players are ready when they reconnect
-    if (player1Connected && player2Connected) {
-        checkBothPlayersReady();
+    // Check if player disconnect/reconnect affects the game
+    if (gameActive) {
+        if (!player1Connected || !player2Connected) {
+            statusElement.textContent = "Game paused: waiting for all players to reconnect...";
+        } else if ((!wasPlayer1Connected || !wasPlayer2Connected) && player1Connected && player2Connected) {
+            // Both players are now connected, resume game
+            statusElement.textContent = `Game resumed. ${currentPlayer === 'player1' ? 'Player 1' : 'Player 2'}'s turn.`;
+        }
+    } else {
+        // Check if both players are ready when they reconnect
+        if (player1Connected && player2Connected) {
+            checkBothPlayersReady();
+        }
     }
 }
 
@@ -359,6 +397,7 @@ function saveGameState() {
         currentDefender: currentDefender,
         currentPlayer: currentPlayer,
         gameActive: gameActive,
+        gameStarted: gameStarted,
         player1Ready: player1Ready,
         player2Ready: player2Ready
     };
@@ -371,26 +410,32 @@ function saveGameState() {
 function loadGameState() {
     const gameStateJSON = localStorage.getItem('durakGameState');
     if (gameStateJSON) {
-        const gameState = JSON.parse(gameStateJSON);
-        
-        deck = gameState.deck;
-        playerOneHand = gameState.playerOneHand;
-        playerTwoHand = gameState.playerTwoHand;
-        trumpSuit = gameState.trumpSuit;
-        trumpCard = gameState.trumpCard;
-        attackCards = gameState.attackCards;
-        defenseCards = gameState.defenseCards;
-        currentAttacker = gameState.currentAttacker;
-        currentDefender = gameState.currentDefender;
-        currentPlayer = gameState.currentPlayer;
-        gameActive = gameState.gameActive;
-        player1Ready = gameState.player1Ready || false;
-        player2Ready = gameState.player2Ready || false;
-        
-        updateUI();
-        toggleControls();
-        
-        return true;
+        try {
+            const gameState = JSON.parse(gameStateJSON);
+            
+            deck = gameState.deck || [];
+            playerOneHand = gameState.playerOneHand || [];
+            playerTwoHand = gameState.playerTwoHand || [];
+            trumpSuit = gameState.trumpSuit || '';
+            trumpCard = gameState.trumpCard || null;
+            attackCards = gameState.attackCards || [];
+            defenseCards = gameState.defenseCards || [];
+            currentAttacker = gameState.currentAttacker || null;
+            currentDefender = gameState.currentDefender || null;
+            currentPlayer = gameState.currentPlayer || null;
+            gameActive = gameState.gameActive || false;
+            gameStarted = gameState.gameStarted || false;
+            player1Ready = gameState.player1Ready || false;
+            player2Ready = gameState.player2Ready || false;
+            
+            updateUI();
+            toggleControls();
+            
+            return true;
+        } catch (e) {
+            console.error("Error parsing game state:", e);
+            return false;
+        }
     }
     
     return false;
@@ -399,19 +444,19 @@ function loadGameState() {
 // Sync game state
 function syncGameState() {
     const localTimestamp = localStorage.getItem('durakGameStateTimestamp');
-    const remoteTimestamp = sessionStorage.getItem('durakGameStateTimestamp');
+    const remoteTimestamp = localStorage.getItem('durakGameStateTimestamp_remote');
     
     // If local is newer than remote
     if (localTimestamp && (!remoteTimestamp || parseInt(localTimestamp) > parseInt(remoteTimestamp))) {
-        // Local is newer, save to session
-        sessionStorage.setItem('durakGameStateTimestamp', localTimestamp);
-        sessionStorage.setItem('durakGameState', localStorage.getItem('durakGameState'));
+        // Local is newer, save to remote
+        localStorage.setItem('durakGameStateTimestamp_remote', localTimestamp);
+        localStorage.setItem('durakGameState_remote', localStorage.getItem('durakGameState'));
     } 
     // If remote is newer than local
     else if (remoteTimestamp && (!localTimestamp || parseInt(remoteTimestamp) > parseInt(localTimestamp))) {
         // Remote is newer, save to local
         localStorage.setItem('durakGameStateTimestamp', remoteTimestamp);
-        localStorage.setItem('durakGameState', sessionStorage.getItem('durakGameState'));
+        localStorage.setItem('durakGameState', localStorage.getItem('durakGameState_remote'));
         loadGameState();
     }
     
@@ -427,6 +472,7 @@ function syncGameState() {
 function resetReadyStates() {
     player1Ready = false;
     player2Ready = false;
+    gameStarted = false;
     localStorage.setItem('durakPlayer1Ready', 'false');
     localStorage.setItem('durakPlayer2Ready', 'false');
     
@@ -451,7 +497,13 @@ function initGame() {
     trumpCard = deck[0];
     trumpSuit = trumpCard.suit;
     
+    // Move trump card to bottom of deck
+    deck.shift();
+    
     dealCards();
+    
+    // Put trump card back to the bottom of the deck
+    deck.push(trumpCard);
     
     // Determine first attacker - player with lowest trump goes first
     determineFirstAttacker();
@@ -506,8 +558,10 @@ function shuffleDeck(deck) {
 function dealCards() {
     // Deal 6 cards to each player
     for (let i = 0; i < 6; i++) {
-        if (deck.length > 1) {
+        if (deck.length > 0) {
             playerOneHand.push(drawCard());
+        }
+        if (deck.length > 0) {
             playerTwoHand.push(drawCard());
         }
     }
@@ -519,7 +573,7 @@ function dealCards() {
 
 // Draw a card from the deck
 function drawCard() {
-    if (deck.length > 1) {
+    if (deck.length > 0) {
         return deck.pop();
     }
     return null;
@@ -528,14 +582,14 @@ function drawCard() {
 // Sort hand by suit and rank
 function sortHand(hand) {
     hand.sort((a, b) => {
-        // Trump cards first
+        // Non-trump suits first, grouped by suit
         if (a.suit === trumpSuit && b.suit !== trumpSuit) return 1;
         if (a.suit !== trumpSuit && b.suit === trumpSuit) return -1;
         
         // Same suit, sort by rank
         if (a.suit === b.suit) return a.rank - b.rank;
         
-        // Different suits
+        // Different suits, sort by suit order in the array
         return suits.indexOf(a.suit) - suits.indexOf(b.suit);
     });
 }
@@ -575,8 +629,12 @@ function updateUI() {
     // Update deck count
     deckCountElement.textContent = deck.length;
     
-    // Display trump card
-    displayCard(trumpCardElement, trumpCard);
+    // Display trump card if available
+    if (trumpCard) {
+        displayCard(trumpCardElement, trumpCard, true);
+    } else {
+        trumpCardElement.innerHTML = '';
+    }
     
     // Display player hands based on role
     if (playerRole === 1) {
@@ -594,7 +652,11 @@ function updateUI() {
     }
     
     // Update turn indicator
-    turnIndicatorElement.textContent = currentPlayer === 'player1' ? "Player 1's Turn" : "Player 2's Turn";
+    if (currentPlayer) {
+        turnIndicatorElement.textContent = currentPlayer === 'player1' ? "Player 1's Turn" : "Player 2's Turn";
+    } else {
+        turnIndicatorElement.textContent = "Waiting for game to start";
+    }
     
     // Display attack and defense cards
     updateBattleArea();
@@ -641,6 +703,8 @@ function displayCard(container, card, isVisible = true) {
 function displayHand(container, hand, isVisible) {
     container.innerHTML = '';
     
+    if (!hand || hand.length === 0) return;
+    
     hand.forEach(card => {
         const cardElement = document.createElement('div');
         cardElement.className = `card ${isVisible ? card.color : 'card-back'}`;
@@ -670,18 +734,20 @@ function updateBattleArea() {
         const attackCard = attackCards[i];
         const defenseCard = defenseCards[i];
         
-        const pairDiv = document.createElement('div');
-        pairDiv.className = 'card-pair';
-        
-        displayCard(pairDiv, attackCard, true);
-        
-        if (defenseCard) {
-            const defenseDiv = document.createElement('div');
-            displayCard(defenseDiv, defenseCard, true);
-            pairDiv.appendChild(defenseDiv);
+        if (attackCard) {
+            const pairDiv = document.createElement('div');
+            pairDiv.className = 'card-pair';
+            
+            displayCard(pairDiv, attackCard, true);
+            
+            if (defenseCard) {
+                const defenseDiv = document.createElement('div');
+                displayCard(defenseDiv, defenseCard, true);
+                pairDiv.appendChild(defenseDiv);
+            }
+            
+            attackAreaElement.appendChild(pairDiv);
         }
-        
-        attackAreaElement.appendChild(pairDiv);
     }
 }
 
@@ -746,7 +812,11 @@ function handleCardClick(card) {
 
 // Check if a card can be played as an additional attack
 function canAddAttackCard(card) {
-    if (attackCards.length >= 6 || attackCards.length > defenseCards.length) {
+    // Get defender's hand
+    const defenderHand = currentDefender === 'player1' ? playerOneHand : playerTwoHand;
+    
+    // In Durak, you can only attack with as many cards as the defender has
+    if (attackCards.length >= 6 || attackCards.length > defenseCards.length || attackCards.length >= defenderHand.length) {
         return false;
     }
     
@@ -790,7 +860,11 @@ function playCard(hand, card, type) {
         
         updateUI();
         toggleControls();
-        checkGameEnd();
+        
+        // Check for win after each card play
+        if (checkGameEnd()) {
+            return; // Game ended, don't proceed
+        }
     }
 }
 
@@ -798,53 +872,63 @@ function playCard(hand, card, type) {
 function takeCards() {
     // Check if it's this player's turn
     const playerNumber = playerRole === 1 ? 'player1' : 'player2';
-    if (currentPlayer !== playerNumber) {
-        statusElement.textContent = "It's not your turn.";
+    if (currentPlayer !== playerNumber || currentPlayer !== currentDefender) {
+        statusElement.textContent = "It's not your turn to take cards.";
         return;
     }
     
     const allCards = [...attackCards, ...defenseCards];
     
-    if (currentPlayer === currentDefender) {
-        // Current defender's hand
-        const defenderHand = currentDefender === 'player1' ? playerOneHand : playerTwoHand;
-        defenderHand.push(...allCards);
-        
-        if (currentDefender === 'player1') {
-            sortHand(playerOneHand);
-        } else {
-            sortHand(playerTwoHand);
-        }
-        
-        // Defender remains the same, attacker gets another turn
-        statusElement.textContent = `${currentDefender === 'player1' ? 'Player 1' : 'Player 2'} took the cards.`;
-        
-        // Attacker remains the same for next round
-        currentPlayer = currentAttacker;
-        
-        // Reset battle area
-        attackCards = [];
-        defenseCards = [];
-        
-        // Draw cards
-        drawCardsAfterRound();
-        
-        updateUI();
-        toggleControls();
-        
-        // Save game state
-        saveGameState();
-        
-        checkGameEnd();
+    // Current defender's hand
+    const defenderHand = currentDefender === 'player1' ? playerOneHand : playerTwoHand;
+    defenderHand.push(...allCards);
+    
+    // Sort the hand
+    if (currentDefender === 'player1') {
+        sortHand(playerOneHand);
+    } else {
+        sortHand(playerTwoHand);
     }
+    
+    // Defender remains the same, attacker gets another turn
+    statusElement.textContent = `${currentDefender === 'player1' ? 'Player 1' : 'Player 2'} took the cards.`;
+    
+    // Attacker remains the same for next round
+    currentPlayer = currentAttacker;
+    
+    // Reset battle area
+    attackCards = [];
+    defenseCards = [];
+    
+    // Draw cards
+    drawCardsAfterRound();
+    
+    updateUI();
+    toggleControls();
+    
+    // Save game state
+    saveGameState();
+    
+    // Check if game ended
+    checkGameEnd();
 }
 
 // End round (all attacks defended)
 function endRound() {
-    // Check if it's this player's turn
+    // Check if it's appropriate to end round
     const playerNumber = playerRole === 1 ? 'player1' : 'player2';
     if (currentPlayer !== playerNumber) {
         statusElement.textContent = "It's not your turn.";
+        return;
+    }
+    
+    if (currentPlayer === currentAttacker && attackCards.length === 0) {
+        statusElement.textContent = "You need to play at least one attack card.";
+        return;
+    }
+    
+    if (currentPlayer === currentDefender && attackCards.length !== defenseCards.length) {
+        statusElement.textContent = "You need to defend against all attacks first.";
         return;
     }
     
@@ -868,6 +952,7 @@ function endRound() {
     // Save game state
     saveGameState();
     
+    // Check if game ended
     checkGameEnd();
 }
 
@@ -931,21 +1016,34 @@ function toggleControls() {
 
 // Check if game has ended
 function checkGameEnd() {
-    if (!gameActive) return;
+    if (!gameActive) return false;
     
-    if (deck.length === 0) {
-        if (playerOneHand.length === 0) {
-            statusElement.textContent = "Player 1 wins! Player 2 is the durak.";
-            gameActive = false;
-            resetReadyStates();
-        } else if (playerTwoHand.length === 0) {
-            statusElement.textContent = "Player 2 wins! Player 1 is the durak.";
-            gameActive = false;
-            resetReadyStates();
-        }
+    // Check if a player has no cards left
+    if (playerOneHand.length === 0) {
+        statusElement.textContent = "Player 1 wins! Player 2 is the durak.";
+        gameActive = false;
+        gameStarted = false;
+        resetReadyStates();
+        toggleControls();
+        saveGameState();
+        return true;
+    } else if (playerTwoHand.length === 0) {
+        statusElement.textContent = "Player 2 wins! Player 1 is the durak.";
+        gameActive = false;
+        gameStarted = false;
+        resetReadyStates();
+        toggleControls();
+        saveGameState();
+        return true;
     }
     
-    toggleControls();
+    // Check if deck is empty and one player has no cards
+    if (deck.length === 0) {
+        // Continue the game until someone wins
+        toggleControls();
+    }
+    
+    return false;
 }
 
 // Event listeners for buttons
@@ -963,7 +1061,18 @@ doneButton.addEventListener('click', () => {
 startButton.addEventListener('click', () => {
     // Reset ready states
     resetReadyStates();
+    gameStarted = false;
     statusElement.textContent = "Waiting for both players to be ready...";
     saveGameState();
+    syncGameState(); // Force sync to notify other player
     toggleControls();
+});
+
+// Add window closing/reloading event to mark player as disconnected
+window.addEventListener('beforeunload', () => {
+    if (playerRole === 1) {
+        localStorage.removeItem('durakPlayer1LastActive');
+    } else if (playerRole === 2) {
+        localStorage.removeItem('durakPlayer2LastActive');
+    }
 });
