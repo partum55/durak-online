@@ -5,74 +5,140 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Durak Card Game - Two Players</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </head>
 <body>
     <div class="game-container">
-        <h1>Durak Card Game - Two Players</h1>
-        <p>Goal: Get rid of all your cards. The last player with cards is the "Durak" (Fool).</p>
+        <h1>Durak Card Game</h1>
+        <p class="game-subtitle">The classic Russian card game for two players</p>
         
         <div class="player-select" id="player-select">
             <h2>Select a Player</h2>
             <div class="game-id" id="game-id">Game ID: <span id="game-id-value"></span></div>
             <div class="players-connected">
-                <div class="player-status player-disconnected" id="player1-status">Player 1</div>
-                <div class="player-status player-disconnected" id="player2-status">Player 2</div>
+                <div class="player-status player-disconnected" id="player1-status">
+                    <i class="fas fa-user"></i> Player 1
+                </div>
+                <div class="player-status player-disconnected" id="player2-status">
+                    <i class="fas fa-user"></i> Player 2
+                </div>
             </div>
             <div class="player-buttons">
-                <button class="btn btn-primary" id="btn-player-one">I'm Player 1</button>
-                <button class="btn btn-danger" id="btn-player-two">I'm Player 2</button>
+                <button class="btn btn-primary" id="btn-player-one">
+                    <i class="fas fa-user"></i> I'm Player 1
+                </button>
+                <button class="btn btn-danger" id="btn-player-two">
+                    <i class="fas fa-user"></i> I'm Player 2
+                </button>
+            </div>
+            
+            <div class="game-rules">
+                <div class="rules-header" id="rules-header">How to Play Durak</div>
+                <div class="rules-content" id="rules-content">
+                    <p>Durak (meaning "fool" in Russian) is a traditional card game where players take turns attacking and defending.</p>
+                    <ul>
+                        <li><strong>Goal:</strong> Get rid of all your cards. The last player with cards is the "Durak" (fool).</li>
+                        <li><strong>Setup:</strong> Each player gets 6 cards. The last card in the deck is turned up to show the trump suit.</li>
+                        <li><strong>Attacking:</strong> The attacker plays a card, and the defender must beat it with a higher card of the same suit or any trump card.</li>
+                        <li><strong>Defending:</strong> If the defender successfully defends, the attacker can add more cards that match ranks already on the table.</li>
+                        <li><strong>Taking Cards:</strong> If a defender can't or doesn't want to defend, they take all cards played in that round.</li>
+                        <li><strong>End of Round:</strong> After each round, players draw back up to 6 cards (if possible).</li>
+                    </ul>
+                </div>
             </div>
         </div>
         
         <div id="connection-info" class="hidden">
             <div class="connection-status">Connected as <span id="player-role-display"></span></div>
             <div class="players-connected">
-                <div class="player-status player-disconnected" id="player1-status-game">Player 1</div>
-                <div class="player-status player-disconnected" id="player2-status-game">Player 2</div>
+                <div class="player-status player-disconnected" id="player1-status-game">
+                    <i class="fas fa-user"></i> Player 1
+                </div>
+                <div class="player-status player-disconnected" id="player2-status-game">
+                    <i class="fas fa-user"></i> Player 2
+                </div>
             </div>
             <div class="auto-sync">
                 <input type="checkbox" id="auto-sync" checked>
                 <label for="auto-sync">Auto-sync game state</label>
             </div>
             <div class="sync-message">Last sync: <span id="last-sync-time">Never</span></div>
-            <button class="btn btn-primary sync-button" id="btn-sync">Sync Game</button>
+            <button class="btn btn-primary sync-button" id="btn-sync">
+                <i class="fas fa-sync-alt"></i> Sync Game
+            </button>
         </div>
         
         <div class="game-table" id="game-table" style="display: none;">
             <div class="game-info">
-                <div class="player-name" id="player-one-info">Player 1</div>
-                <div class="player-name" id="player-two-info">Player 2</div>
+                <div class="player-name" id="player-one-info">
+                    <i class="fas fa-user"></i> Player 1
+                </div>
+                <div class="turn-indicator">Waiting to Start</div>
+                <div class="player-name" id="player-two-info">
+                    <i class="fas fa-user"></i> Player 2
+                </div>
             </div>
             
-            <div class="deck">
-                <span class="deck-count">36</span>
-                <span>cards</span>
-            </div>
-            <div class="trump-card"></div>
-            <div class="turn-indicator">Player 1's Turn</div>
-            
-            <div class="player-indicator player-two-indicator">Player 2's Cards</div>
-            <div class="player-hand player-two-hand"></div>
-            
-            <div class="battle-area">
-                <div class="attack-area"></div>
-                <div class="defense-area"></div>
-            </div>
-            
-            <div class="player-indicator player-one-indicator">Player 1's Cards</div>
-            <div class="player-hand player-one-hand"></div>
-            
-            <div class="controls">
-                <button class="btn btn-danger" id="btn-take">Take Cards</button>
-                <button class="btn btn-success" id="btn-done">Done / End Turn</button>
-                <button class="btn btn-primary" id="btn-start">Start New Game</button>
-                <!-- New buttons will be added via JavaScript -->
+            <div class="game-layout">
+                <div class="player-indicator player-two-indicator">Player 2's Cards</div>
+                <div class="player-hand player-two-hand"></div>
+                
+                <div class="card-source-area">
+                    <div class="deck">
+                        <span class="deck-count">36</span>
+                        <span>cards</span>
+                    </div>
+                    <div class="trump-card"></div>
+                </div>
+                
+                <div class="battle-area">
+                    <div class="attack-area"></div>
+                    <div class="defense-area"></div>
+                </div>
+                
+                <div class="player-indicator player-one-indicator">Player 1's Cards</div>
+                <div class="player-hand player-one-hand"></div>
             </div>
             
             <div class="status">Waiting for game to start...</div>
+            
+            <div class="controls">
+                <button class="btn btn-danger" id="btn-take">
+                    <i class="fas fa-hand-paper"></i> Take Cards
+                </button>
+                <button class="btn btn-success" id="btn-done">
+                    <i class="fas fa-check"></i> Done / End Turn
+                </button>
+                <button class="btn btn-primary" id="btn-start">
+                    <i class="fas fa-play"></i> Start New Game
+                </button>
+                <!-- Additional buttons will be added via JavaScript -->
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>&copy; 2025 Durak Online | <a href="#" id="show-rules">Game Rules</a></p>
         </div>
     </div>
 
     <script src="script.js"></script>
+    <script>
+        // Toggle rules in lobby
+        document.getElementById('rules-header').addEventListener('click', function() {
+            const rulesContent = document.getElementById('rules-content');
+            this.classList.toggle('active');
+            if (rulesContent.classList.contains('show')) {
+                rulesContent.classList.remove('show');
+            } else {
+                rulesContent.classList.add('show');
+            }
+        });
+        
+        // Show rules from footer link
+        document.getElementById('show-rules').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('btn-help').click();
+        });
+    </script>
 </body>
 </html>

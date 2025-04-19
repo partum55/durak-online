@@ -17,6 +17,7 @@ let gameActive = false;
 let gameStarted = false;
 let waitingForPlayers = true;
 let inLobby = true;
+let lastInteractionTime = Date.now();
 
 // Player ready status
 let player1Ready = false;
@@ -48,6 +49,9 @@ const CONNECTION_CHECK_INTERVAL = 3000;
 // Last sync timestamp
 let lastSyncTime = null;
 
+// Toast notification timeout
+let toastTimeout = null;
+
 // DOM elements
 const playerSelectDiv = document.getElementById('player-select');
 const gameTableDiv = document.getElementById('game-table');
@@ -66,6 +70,7 @@ const playerTwoInfoElement = document.getElementById('player-two-info');
 const gameIdElement = document.getElementById('game-id-value');
 const playerRoleDisplay = document.getElementById('player-role-display');
 const lastSyncTimeElement = document.getElementById('last-sync-time');
+const battleAreaElement = document.querySelector('.battle-area');
 
 // Player status elements
 const player1StatusElement = document.getElementById('player1-status');
@@ -81,6 +86,15 @@ const doneButton = document.getElementById('btn-done');
 const startButton = document.getElementById('btn-start');
 const syncButton = document.getElementById('btn-sync');
 const autoSyncCheckbox = document.getElementById('auto-sync');
+
+// Game state update timestamps
+let lastStateUpdate = Date.now();
+const STATE_UPDATE_COOLDOWN = 300; // ms between state updates to prevent race conditions
+
+// Create toast container
+const toastContainer = document.createElement('div');
+toastContainer.className = 'toast-container';
+document.body.appendChild(toastContainer);
 
 // Add buttons for new features
 const readyButton = document.createElement('button');
@@ -122,6 +136,13 @@ reconnectButton.className = 'btn btn-primary';
 reconnectButton.textContent = 'Reconnect';
 reconnectButton.style.display = 'none';
 
+// Help button for rules
+const helpButton = document.createElement('button');
+helpButton.id = 'btn-help';
+helpButton.className = 'btn btn-info';
+helpButton.textContent = 'Game Rules';
+helpButton.style.display = 'none';
+
 // Add the new buttons to the controls section
 const controlsSection = document.querySelector('.controls');
 controlsSection.appendChild(readyButton);
@@ -130,6 +151,7 @@ controlsSection.appendChild(changePlayerButton);
 controlsSection.appendChild(backToLobbyButton);
 controlsSection.appendChild(disconnectButton);
 controlsSection.appendChild(reconnectButton);
+controlsSection.appendChild(helpButton);
 
 // Create "Back to Game" button for the lobby
 const backToGameButton = document.createElement('button');
@@ -149,8 +171,105 @@ const playerButtonsDiv = document.querySelector('.player-buttons');
 playerButtonsDiv.appendChild(backToGameButton);
 playerSelectDiv.appendChild(connectionStatusIndicator);
 
+// Create rules dialog
+createRulesDialog();
+
 // Display game ID
 gameIdElement.textContent = gameId;
+
+// Show toast notification
+function showToast(message, type = 'info', duration = 3000) {
+    // Clear any existing toast timeout
+    if (toastTimeout) {
+        clearTimeout(toastTimeout);
+    }
+    
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        ${message}
+        <div class="toast-progress"></div>
+    `;
+    
+    // Add to container
+    toastContainer.appendChild(toast);
+    
+    // Remove after duration
+    toastTimeout = setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, duration);
+}
+
+// Create game rules dialog
+function createRulesDialog() {
+    const dialog = document.createElement('div');
+    dialog.className = 'instructions-dialog';
+    dialog.id = 'instructions-dialog';
+    
+    dialog.innerHTML = `
+        <div class="instructions-content">
+            <div class="instructions-header">
+                <h2>Durak Card Game Rules</h2>
+                <button class="close-button" id="close-instructions">&times;</button>
+            </div>
+            
+            <div class="instructions-section">
+                <h3>Overview</h3>
+                <p>Durak (which means "fool" in Russian) is a popular card game where the goal is to get rid of all your cards. The last player with cards is the "Durak" (Fool).</p>
+            </div>
+            
+            <div class="instructions-section">
+                <h3>Setup</h3>
+                <ul>
+                    <li>The game uses a 36-card deck (from 6 to Ace in each suit).</li>
+                    <li>Each player initially receives 6 cards.</li>
+                    <li>The last card in the deck is turned face up to determine the trump suit, which beats all other suits.</li>
+                </ul>
+            </div>
+            
+            <div class="instructions-section">
+                <h3>Gameplay</h3>
+                <ul>
+                    <li><strong>Attack:</strong> The attacker starts by playing any card from their hand.</li>
+                    <li><strong>Defense:</strong> The defender must beat each attack card with a higher card of the same suit or any trump card.</li>
+                    <li><strong>Additional Attacks:</strong> If the defender successfully defends, the attacker can add more cards of the same ranks already in play.</li>
+                    <li><strong>Taking Cards:</strong> If the defender cannot or does not want to defend, they must take all cards played in that round.</li>
+                    <li><strong>Drawing:</strong> After each round, players draw cards to have at least 6 cards (attacker draws first).</li>
+                    <li><strong>End of Round:</strong> If all attacks are defended, all played cards are discarded and the defender becomes the next attacker.</li>
+                </ul>
+            </div>
+            
+            <div class="instructions-section">
+                <h3>Winning</h3>
+                <p>The game continues until the deck is exhausted and one player has no cards left. The player who still has cards is the "Durak" (Fool) and loses the game.</p>
+            </div>
+            
+            <div class="instructions-footer">
+                <button class="btn btn-success" id="got-it-button">Got it!</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    // Event listeners for dialog buttons
+    document.getElementById('close-instructions').addEventListener('click', () => {
+        document.getElementById('instructions-dialog').classList.remove('show');
+    });
+    
+    document.getElementById('got-it-button').addEventListener('click', () => {
+        document.getElementById('instructions-dialog').classList.remove('show');
+    });
+}
+
+// Show game rules
+helpButton.addEventListener('click', () => {
+    document.getElementById('instructions-dialog').classList.add('show');
+});
 
 // Set up session tracking with ping mechanism
 function setupConnectionPing() {
@@ -182,9 +301,18 @@ function setupConnectionPing() {
 // Connection ping interval
 let connectionPingInterval = null;
 
+// Track user interaction for auto-refresh safety
+document.addEventListener('click', () => {
+    lastInteractionTime = Date.now();
+});
+
+document.addEventListener('touchstart', () => {
+    lastInteractionTime = Date.now();
+});
+
 // Show waiting area and empty game
 function showEmptyGame() {
-    // Create empty deck
+    // Create empty deck if needed
     if (deck.length === 0) {
         deck = createDeck();
         trumpCard = deck[0];
@@ -203,6 +331,14 @@ function updateEmptyGameUI() {
     // Display trump card
     displayCard(trumpCardElement, trumpCard, true);
     
+    // Add trump indicator
+    if (trumpCard) {
+        const trumpCardElem = trumpCardElement.querySelector('.card');
+        if (trumpCardElem) {
+            trumpCardElem.classList.add('trump');
+        }
+    }
+    
     // Empty player hands
     playerOneHandElement.innerHTML = '';
     playerTwoHandElement.innerHTML = '';
@@ -217,9 +353,14 @@ function updateEmptyGameUI() {
     // Update status message based on connections
     if (!player1Connected || !player2Connected) {
         statusElement.textContent = "Waiting for both players to connect...";
+        statusElement.className = 'status warning';
     } else if (!player1Ready || !player2Ready) {
         statusElement.textContent = "Waiting for both players to be ready...";
+        statusElement.className = 'status warning';
     }
+    
+    // Show help button
+    helpButton.style.display = 'inline-block';
 }
 
 // Update the connection indicator in the lobby
@@ -235,27 +376,55 @@ function updateConnectionIndicator() {
         statusText.className = 'connection-status-text disconnected';
     }
     
-    // Also update player status
+    // Update player status
+    updatePlayerStatusDisplay();
+}
+
+// Update player status indicators
+function updatePlayerStatusDisplay() {
+    // Update lobby player status
     if (player1Connected) {
-        document.getElementById('player1-status').classList.add('player-connected');
-        document.getElementById('player1-status').classList.remove('player-disconnected');
+        player1StatusElement.classList.add('player-connected');
+        player1StatusElement.classList.remove('player-disconnected');
     } else {
-        document.getElementById('player1-status').classList.remove('player-connected');
-        document.getElementById('player1-status').classList.add('player-disconnected');
+        player1StatusElement.classList.remove('player-connected');
+        player1StatusElement.classList.add('player-disconnected');
     }
     
     if (player2Connected) {
-        document.getElementById('player2-status').classList.add('player-connected');
-        document.getElementById('player2-status').classList.remove('player-disconnected');
+        player2StatusElement.classList.add('player-connected');
+        player2StatusElement.classList.remove('player-disconnected');
     } else {
-        document.getElementById('player2-status').classList.remove('player-connected');
-        document.getElementById('player2-status').classList.add('player-disconnected');
+        player2StatusElement.classList.remove('player-connected');
+        player2StatusElement.classList.add('player-disconnected');
+    }
+    
+    // Update in-game player status if elements exist
+    if (player1StatusGameElement) {
+        if (player1Connected) {
+            player1StatusGameElement.classList.add('player-connected');
+            player1StatusGameElement.classList.remove('player-disconnected');
+        } else {
+            player1StatusGameElement.classList.remove('player-connected');
+            player1StatusGameElement.classList.add('player-disconnected');
+        }
+    }
+    
+    if (player2StatusGameElement) {
+        if (player2Connected) {
+            player2StatusGameElement.classList.add('player-connected');
+            player2StatusGameElement.classList.remove('player-disconnected');
+        } else {
+            player2StatusGameElement.classList.remove('player-connected');
+            player2StatusGameElement.classList.add('player-disconnected');
+        }
     }
 }
 
 // Listen for browser online/offline events
 window.addEventListener('online', () => {
     updateConnectionIndicator();
+    showToast('You are back online!', 'success');
     if (wasDisconnected) {
         reconnectPlayer();
         wasDisconnected = false;
@@ -266,6 +435,8 @@ window.addEventListener('offline', () => {
     updateConnectionIndicator();
     wasDisconnected = true;
     statusElement.textContent = "You are offline. Reconnect to continue playing.";
+    statusElement.className = 'status alert';
+    showToast('You are offline. Game will resume when connection is restored.', 'error');
 });
 
 // Clear all ready states (useful on page refresh)
@@ -291,7 +462,7 @@ function clearAllReadyStates() {
         // Auto select the saved player role
         selectPlayer();
     } else {
-        // If no player role is saved, show empty game
+        // If no player role is saved, show empty game in lobby
         showEmptyGame();
         gameTableDiv.style.display = 'block';
         inLobby = true;
@@ -336,6 +507,7 @@ playerOneButton.addEventListener('click', () => {
         connectionPingInterval = setupConnectionPing();
         
         selectPlayer();
+        showToast('You joined as Player 1', 'success');
     } else {
         const currentSessionId = localStorage.getItem('durakPlayer1SessionId');
         const mySessionId = localStorage.getItem('durakSessionId');
@@ -346,8 +518,9 @@ playerOneButton.addEventListener('click', () => {
             localStorage.setItem('durakPlayerRole', playerRole);
             inLobby = false;
             selectPlayer();
+            showToast('Resumed as Player 1', 'info');
         } else {
-            alert('Player 1 is already connected from another window or browser!');
+            showToast('Player 1 is already connected from another device or browser!', 'error');
         }
     }
 });
@@ -362,6 +535,7 @@ playerTwoButton.addEventListener('click', () => {
         connectionPingInterval = setupConnectionPing();
         
         selectPlayer();
+        showToast('You joined as Player 2', 'success');
     } else {
         const currentSessionId = localStorage.getItem('durakPlayer2SessionId');
         const mySessionId = localStorage.getItem('durakSessionId');
@@ -372,8 +546,9 @@ playerTwoButton.addEventListener('click', () => {
             localStorage.setItem('durakPlayerRole', playerRole);
             inLobby = false;
             selectPlayer();
+            showToast('Resumed as Player 2', 'info');
         } else {
-            alert('Player 2 is already connected from another window or browser!');
+            showToast('Player 2 is already connected from another device or browser!', 'error');
         }
     }
 });
@@ -393,8 +568,9 @@ backToGameButton.addEventListener('click', () => {
         }
         
         selectPlayer();
+        showToast('Returned to game', 'success');
     } else {
-        alert('No active game found!');
+        showToast('No active game found!', 'error');
         backToGameButton.style.display = 'none';
     }
 });
@@ -417,6 +593,7 @@ function reconnectPlayer() {
         
         // Update UI
         statusElement.textContent = "Reconnected! Game will resume shortly...";
+        statusElement.className = 'status success';
         reconnectButton.style.display = 'none';
         
         // Sync game state
@@ -424,8 +601,11 @@ function reconnectPlayer() {
         
         // Hide reconnect button
         reconnectButton.style.display = 'none';
+        
+        showToast('Successfully reconnected to the game', 'success');
     } else {
         statusElement.textContent = "Please select a player to connect.";
+        statusElement.className = 'status warning';
     }
 }
 
@@ -464,14 +644,19 @@ function checkActiveGame() {
 }
 
 // Sync game button
-syncButton.addEventListener('click', syncGameState);
+syncButton.addEventListener('click', () => {
+    syncGameState();
+    showToast('Game state synchronized', 'info');
+});
 
 // Auto-sync checkbox
 autoSyncCheckbox.addEventListener('change', function() {
     if (this.checked) {
         startAutoSync();
+        showToast('Auto-sync enabled', 'info');
     } else {
         stopAutoSync();
+        showToast('Auto-sync disabled', 'info');
     }
 });
 
@@ -489,6 +674,7 @@ readyButton.addEventListener('click', () => {
     readyButton.textContent = 'Ready ✓';
     
     statusElement.textContent = 'Waiting for the other player to be ready...';
+    statusElement.className = 'status warning';
     
     // Save game state
     saveGameState();
@@ -498,6 +684,8 @@ readyButton.addEventListener('click', () => {
     
     // Check if both players are ready
     checkBothPlayersReady();
+    
+    showToast('You are ready to play!', 'success');
 });
 
 // Fold button
@@ -508,8 +696,10 @@ foldButton.addEventListener('click', () => {
         // Declare the other player as winner
         if (playerRole === 1) {
             statusElement.textContent = "Player 1 folded. Player 2 wins!";
+            statusElement.className = 'status alert';
         } else {
             statusElement.textContent = "Player 2 folded. Player 1 wins!";
+            statusElement.className = 'status alert';
         }
         
         // End the game
@@ -527,6 +717,8 @@ foldButton.addEventListener('click', () => {
         // Update UI
         updateUI();
         toggleControls();
+        
+        showToast('You folded and lost the game', 'warning');
     }
 });
 
@@ -541,6 +733,8 @@ changePlayerButton.addEventListener('click', () => {
     
     // Return to lobby
     returnToLobby();
+    
+    showToast('Changed player', 'info');
 });
 
 // Back to Lobby button
@@ -552,6 +746,8 @@ backToLobbyButton.addEventListener('click', () => {
     // We keep the player role here, just go back to lobby
     inLobby = true;
     returnToLobby();
+    
+    showToast('Returned to lobby', 'info');
 });
 
 // Disconnect button
@@ -560,10 +756,11 @@ disconnectButton.addEventListener('click', () => {
         disconnectPlayer();
         
         // Show a message to let the user know they've been disconnected
-        alert('You have been disconnected from the game');
+        showToast('You have been disconnected from the game', 'error');
         
         // Update UI to show disconnected state
         statusElement.textContent = "You are disconnected. Choose a player to reconnect.";
+        statusElement.className = 'status alert';
         
         // Return to lobby
         inLobby = true;
@@ -649,6 +846,7 @@ function selectPlayer() {
     changePlayerButton.style.display = 'inline-block';
     backToLobbyButton.style.display = 'inline-block';
     disconnectButton.style.display = 'inline-block';
+    helpButton.style.display = 'inline-block';
     
     // Hide reconnect button
     reconnectButton.style.display = 'none';
@@ -659,6 +857,23 @@ function selectPlayer() {
     }
     
     inLobby = false;
+    
+    // Highlight player's own hand
+    highlightPlayerHand();
+}
+
+// Highlight the current player's hand
+function highlightPlayerHand() {
+    // Remove highlights first
+    playerOneHandElement.classList.remove('active-player');
+    playerTwoHandElement.classList.remove('active-player');
+    
+    // Add highlight based on player role
+    if (playerRole === 1) {
+        playerOneHandElement.classList.add('active-player');
+    } else if (playerRole === 2) {
+        playerTwoHandElement.classList.add('active-player');
+    }
 }
 
 // Check if players are ready
@@ -704,6 +919,7 @@ function checkBothPlayersReady() {
             initGame();
             // Hide ready button
             readyButton.style.display = 'none';
+            showToast('Game is starting!', 'success');
         }, 500);
     } else if (!gameActive) {
         // Update the empty UI while waiting
@@ -718,17 +934,11 @@ function markPlayerAsConnected(role) {
     if (role === 1) {
         localStorage.setItem('durakPlayer1LastActive', timestamp);
         player1Connected = true;
-        player1StatusElement.classList.remove('player-disconnected');
-        player1StatusElement.classList.add('player-connected');
-        player1StatusGameElement.classList.remove('player-disconnected');
-        player1StatusGameElement.classList.add('player-connected');
+        updatePlayerStatusDisplay();
     } else if (role === 2) {
         localStorage.setItem('durakPlayer2LastActive', timestamp);
         player2Connected = true;
-        player2StatusElement.classList.remove('player-disconnected');
-        player2StatusElement.classList.add('player-connected');
-        player2StatusGameElement.classList.remove('player-disconnected');
-        player2StatusGameElement.classList.add('player-connected');
+        updatePlayerStatusDisplay();
     }
 }
 
@@ -745,33 +955,20 @@ function checkPlayerConnections() {
     const player1LastActive = localStorage.getItem('durakPlayer1LastActive');
     if (player1LastActive && (currentTime - parseInt(player1LastActive)) < inactiveThreshold) {
         player1Connected = true;
-        player1StatusElement.classList.remove('player-disconnected');
-        player1StatusElement.classList.add('player-connected');
-        player1StatusGameElement.classList.remove('player-disconnected');
-        player1StatusGameElement.classList.add('player-connected');
     } else {
         player1Connected = false;
-        player1StatusElement.classList.remove('player-connected');
-        player1StatusElement.classList.add('player-disconnected');
-        player1StatusGameElement.classList.remove('player-connected');
-        player1StatusGameElement.classList.add('player-disconnected');
     }
     
     // Check Player 2
     const player2LastActive = localStorage.getItem('durakPlayer2LastActive');
     if (player2LastActive && (currentTime - parseInt(player2LastActive)) < inactiveThreshold) {
         player2Connected = true;
-        player2StatusElement.classList.remove('player-disconnected');
-        player2StatusElement.classList.add('player-connected');
-        player2StatusGameElement.classList.remove('player-disconnected');
-        player2StatusGameElement.classList.add('player-connected');
     } else {
         player2Connected = false;
-        player2StatusElement.classList.remove('player-connected');
-        player2StatusElement.classList.add('player-disconnected');
-        player2StatusGameElement.classList.remove('player-connected');
-        player2StatusGameElement.classList.add('player-disconnected');
     }
+    
+    // Update the player status displays
+    updatePlayerStatusDisplay();
     
     // Check if current player is connected
     let currentlyConnected = false;
@@ -784,6 +981,7 @@ function checkPlayerConnections() {
         if (!currentlyConnected) {
             reconnectButton.style.display = 'inline-block';
             statusElement.textContent = "Connection lost. Please reconnect to continue.";
+            statusElement.className = 'status alert';
         } else {
             markPlayerAsConnected(playerRole);
             reconnectButton.style.display = 'none';
@@ -799,9 +997,14 @@ function checkPlayerConnections() {
     if (gameActive && !inLobby) {
         if (!player1Connected || !player2Connected) {
             statusElement.textContent = "Game paused: waiting for all players to reconnect...";
+            statusElement.className = 'status warning';
+            battleAreaElement.classList.remove('active');
         } else if ((!wasPlayer1Connected || !wasPlayer2Connected) && player1Connected && player2Connected) {
             // Both players are now connected, resume game
             statusElement.textContent = `Game resumed. ${currentPlayer === 'player1' ? 'Player 1' : 'Player 2'}'s turn.`;
+            statusElement.className = 'status success';
+            battleAreaElement.classList.add('active');
+            showToast('All players connected. Game resumed!', 'success');
         }
     } else {
         // Check if both players are ready when they reconnect
@@ -834,6 +1037,13 @@ function stopAutoSync() {
 
 // Save game state to localStorage
 function saveGameState() {
+    // Prevent too frequent updates (race conditions)
+    const now = Date.now();
+    if (now - lastStateUpdate < STATE_UPDATE_COOLDOWN) {
+        return;
+    }
+    lastStateUpdate = now;
+    
     const gameState = {
         deck: deck,
         playerOneHand: playerOneHand,
@@ -857,7 +1067,7 @@ function saveGameState() {
         localStorage.setItem('durakGameStateTimestamp', new Date().getTime());
     } catch (e) {
         console.error("Error saving game state:", e);
-        alert("Error saving game state. Your browser storage might be full.");
+        showToast("Error saving game state. Your browser storage might be full.", "error");
     }
 }
 
@@ -886,8 +1096,14 @@ function loadGameState() {
             
             if (gameActive) {
                 updateUI();
+                
+                // Highlight battle area if game is active
+                battleAreaElement.classList.add('active');
             } else if (waitingForPlayers) {
                 updateEmptyGameUI();
+                
+                // Remove highlight from battle area
+                battleAreaElement.classList.remove('active');
             }
             
             toggleControls();
@@ -900,7 +1116,7 @@ function loadGameState() {
             try {
                 localStorage.removeItem('durakGameState');
                 localStorage.removeItem('durakGameStateTimestamp');
-                alert("Game state was corrupted and has been reset.");
+                showToast("Game state was corrupted and has been reset.", "error");
             } catch (clearError) {
                 console.error("Could not clear corrupted state:", clearError);
             }
@@ -912,11 +1128,17 @@ function loadGameState() {
     return false;
 }
 
-// Sync game state
+// Sync game state - improved to handle potential race conditions
 function syncGameState() {
     // Don't sync if offline
     if (!navigator.onLine) {
         lastSyncTimeElement.textContent = "Offline";
+        return;
+    }
+    
+    // Don't sync if there was recent user interaction (to prevent race conditions)
+    const timeSinceLastInteraction = Date.now() - lastInteractionTime;
+    if (timeSinceLastInteraction < 500) {
         return;
     }
     
@@ -1019,11 +1241,16 @@ function initGame() {
     // Display status message
     if (currentAttacker === 'player1') {
         statusElement.textContent = "Player 1 attacks first. Select a card to play.";
+        statusElement.className = 'status';
         turnIndicatorElement.textContent = "Player 1's Turn";
     } else {
         statusElement.textContent = "Player 2 attacks first. Select a card to play.";
+        statusElement.className = 'status';
         turnIndicatorElement.textContent = "Player 2's Turn";
     }
+    
+    // Highlight battle area when game is active
+    battleAreaElement.classList.add('active');
     
     updateUI();
     toggleControls();
@@ -1135,6 +1362,12 @@ function updateUI() {
     // Display trump card if available
     if (trumpCard) {
         displayCard(trumpCardElement, trumpCard, true);
+        
+        // Add trump indicator
+        const trumpCardElem = trumpCardElement.querySelector('.card');
+        if (trumpCardElem) {
+            trumpCardElem.classList.add('trump');
+        }
     } else {
         trumpCardElement.innerHTML = '';
     }
@@ -1166,6 +1399,57 @@ function updateUI() {
     
     // Update player info highlighting
     updatePlayerInfoHighlight();
+    
+    // Highlight playable cards for current player
+    highlightPlayableCards();
+    
+    // Highlight player's own hand
+    highlightPlayerHand();
+}
+
+// Highlight playable cards for current player
+function highlightPlayableCards() {
+    if (!gameActive) return;
+    
+    // Check if it's this player's turn
+    const playerNumber = playerRole === 1 ? 'player1' : 'player2';
+    if (currentPlayer !== playerNumber) return;
+    
+    // Get all card elements
+    const handElement = playerNumber === 'player1' ? playerOneHandElement : playerTwoHandElement;
+    const cardElements = handElement.querySelectorAll('.card');
+    
+    // Remove playable class from all cards
+    cardElements.forEach(card => {
+        card.classList.remove('playable');
+    });
+    
+    // Get current player's hand
+    const currentHand = currentPlayer === 'player1' ? playerOneHand : playerTwoHand;
+    
+    // For each card in hand, check if it's playable
+    currentHand.forEach((card, index) => {
+        let isPlayable = false;
+        
+        // Attack phase
+        if (currentPlayer === currentAttacker) {
+            if (attackCards.length === 0 || canAddAttackCard(card)) {
+                isPlayable = true;
+            }
+        } 
+        // Defense phase
+        else if (currentPlayer === currentDefender) {
+            const attackCard = attackCards[defenseCards.length];
+            if (canDefendWithCard(card, attackCard)) {
+                isPlayable = true;
+            }
+        }
+        
+        // Add playable class to card element if it's playable
+        if (isPlayable && cardElements[index]) {
+            cardElements[index].classList.add('playable');
+        }
+    });
 }
 
 // Update player info highlighting based on current player
@@ -1177,6 +1461,24 @@ function updatePlayerInfoHighlight() {
         playerOneInfoElement.classList.add('active-player');
     } else if (currentPlayer === 'player2') {
         playerTwoInfoElement.classList.add('active-player');
+    }
+    
+    // Also update player indicator sections
+    const player1Indicator = document.querySelector('.player-one-indicator');
+    const player2Indicator = document.querySelector('.player-two-indicator');
+    
+    if (player1Indicator) {
+        player1Indicator.classList.remove('active');
+        if (currentPlayer === 'player1') {
+            player1Indicator.classList.add('active');
+        }
+    }
+    
+    if (player2Indicator) {
+        player2Indicator.classList.remove('active');
+        if (currentPlayer === 'player2') {
+            player2Indicator.classList.add('active');
+        }
     }
 }
 
@@ -1190,6 +1492,11 @@ function displayCard(container, card, isVisible = true) {
     cardElement.className = `card ${isVisible ? card.color : 'card-back'}`;
     cardElement.dataset.suit = card.suit;
     cardElement.dataset.value = card.value;
+    
+    // Add trump indicator
+    if (card.suit === trumpSuit) {
+        cardElement.classList.add('trump');
+    }
     
     if (isVisible) {
         cardElement.innerHTML = `
@@ -1211,6 +1518,11 @@ function displayHand(container, hand, isVisible) {
     hand.forEach(card => {
         const cardElement = document.createElement('div');
         cardElement.className = `card ${isVisible ? card.color : 'card-back'}`;
+        
+        // Add trump indicator
+        if (card.suit === trumpSuit) {
+            cardElement.classList.add('trump');
+        }
         
         if (isVisible) {
             cardElement.innerHTML = `
@@ -1258,9 +1570,14 @@ function updateBattleArea() {
 function handleCardClick(card) {
     if (!gameActive) return;
     
+    // Update last interaction time
+    lastInteractionTime = Date.now();
+    
     // Check if game is paused due to player disconnection
     if (!player1Connected || !player2Connected) {
         statusElement.textContent = "Cannot play: waiting for all players to reconnect...";
+        statusElement.className = 'status warning';
+        showToast("Cannot play: waiting for all players to reconnect...", "warning");
         return;
     }
     
@@ -1268,6 +1585,8 @@ function handleCardClick(card) {
     const playerNumber = playerRole === 1 ? 'player1' : 'player2';
     if (currentPlayer !== playerNumber) {
         statusElement.textContent = "It's not your turn.";
+        statusElement.className = 'status warning';
+        showToast("It's not your turn", "warning");
         return;
     }
     
@@ -1288,6 +1607,8 @@ function handleCardClick(card) {
             saveGameState();
         } else {
             statusElement.textContent = "You can only play cards with values already in play.";
+            statusElement.className = 'status warning';
+            showToast("Invalid move: You can only play cards with values already in play", "warning");
         }
     } 
     // Defense phase
@@ -1307,6 +1628,8 @@ function handleCardClick(card) {
             saveGameState();
         } else {
             statusElement.textContent = "This card cannot defend against the attack.";
+            statusElement.className = 'status warning';
+            showToast("Invalid move: This card cannot defend against the attack", "warning");
         }
     }
     
@@ -1356,9 +1679,13 @@ function playCard(hand, card, type) {
         if (type === 'attack') {
             attackCards.push(card);
             statusElement.textContent = `${currentPlayer === 'player1' ? 'Player 1' : 'Player 2'} attacked with ${card.value}${card.suit}`;
+            statusElement.className = 'status';
+            showToast(`${currentPlayer === 'player1' ? 'Player 1' : 'Player 2'} attacked with ${card.value}${card.suit}`, "info");
         } else {
             defenseCards.push(card);
             statusElement.textContent = `${currentPlayer === 'player1' ? 'Player 1' : 'Player 2'} defended with ${card.value}${card.suit}`;
+            statusElement.className = 'status';
+            showToast(`${currentPlayer === 'player1' ? 'Player 1' : 'Player 2'} defended with ${card.value}${card.suit}`, "info");
         }
         
         updateUI();
@@ -1373,10 +1700,15 @@ function playCard(hand, card, type) {
 
 // Take cards action
 function takeCards() {
+    // Update last interaction time
+    lastInteractionTime = Date.now();
+    
     // Check if it's this player's turn
     const playerNumber = playerRole === 1 ? 'player1' : 'player2';
     if (currentPlayer !== playerNumber || currentPlayer !== currentDefender) {
         statusElement.textContent = "It's not your turn to take cards.";
+        statusElement.className = 'status warning';
+        showToast("It's not your turn to take cards", "warning");
         return;
     }
     
@@ -1395,6 +1727,8 @@ function takeCards() {
     
     // Defender remains the same, attacker gets another turn
     statusElement.textContent = `${currentDefender === 'player1' ? 'Player 1' : 'Player 2'} took the cards.`;
+    statusElement.className = 'status';
+    showToast(`${currentDefender === 'player1' ? 'Player 1' : 'Player 2'} took the cards`, "info");
     
     // Attacker remains the same for next round
     currentPlayer = currentAttacker;
@@ -1418,20 +1752,29 @@ function takeCards() {
 
 // End round (all attacks defended)
 function endRound() {
+    // Update last interaction time
+    lastInteractionTime = Date.now();
+    
     // Check if it's appropriate to end round
     const playerNumber = playerRole === 1 ? 'player1' : 'player2';
     if (currentPlayer !== playerNumber) {
         statusElement.textContent = "It's not your turn.";
+        statusElement.className = 'status warning';
+        showToast("It's not your turn", "warning");
         return;
     }
     
     if (currentPlayer === currentAttacker && attackCards.length === 0) {
         statusElement.textContent = "You need to play at least one attack card.";
+        statusElement.className = 'status warning';
+        showToast("You need to play at least one attack card", "warning");
         return;
     }
     
     if (currentPlayer === currentDefender && attackCards.length !== defenseCards.length) {
         statusElement.textContent = "You need to defend against all attacks first.";
+        statusElement.className = 'status warning';
+        showToast("You need to defend against all attacks first", "warning");
         return;
     }
     
@@ -1448,6 +1791,8 @@ function endRound() {
     currentPlayer = currentAttacker;
     
     statusElement.textContent = `${currentAttacker === 'player1' ? 'Player 1' : 'Player 2'}'s turn to attack.`;
+    statusElement.className = 'status success';
+    showToast(`${currentAttacker === 'player1' ? 'Player 1' : 'Player 2'}'s turn to attack`, "success");
     
     updateUI();
     toggleControls();
@@ -1458,171 +1803,3 @@ function endRound() {
     // Check if game ended
     checkGameEnd();
 }
-
-// Draw cards after a round
-function drawCardsAfterRound() {
-    // Attacker draws first
-    const attackerHand = currentAttacker === 'player1' ? playerOneHand : playerTwoHand;
-    while (attackerHand.length < 6 && deck.length > 0) {
-        attackerHand.push(drawCard());
-    }
-    
-    // Then defender
-    const defenderHand = currentDefender === 'player1' ? playerOneHand : playerTwoHand;
-    while (defenderHand.length < 6 && deck.length > 0) {
-        defenderHand.push(drawCard());
-    }
-    
-    sortHand(playerOneHand);
-    sortHand(playerTwoHand);
-}
-
-// Toggle controls based on game state and player role
-function toggleControls() {
-    const playerNumber = playerRole === 1 ? 'player1' : 'player2';
-    const isPlayerTurn = currentPlayer === playerNumber;
-    
-    // Hide all buttons by default (except for change player, disconnect and back to lobby)
-    takeButton.style.display = 'none';
-    doneButton.style.display = 'none';
-    startButton.style.display = 'none';
-    readyButton.style.display = 'none';
-    foldButton.style.display = 'none';
-    
-    // Always show player control buttons if player is connected
-    if (playerRole) {
-        changePlayerButton.style.display = 'inline-block';
-        backToLobbyButton.style.display = 'inline-block';
-        disconnectButton.style.display = 'inline-block';
-    } else {
-        changePlayerButton.style.display = 'none';
-        backToLobbyButton.style.display = 'none';
-        disconnectButton.style.display = 'none';
-    }
-    
-    // Check connection status
-    let currentlyConnected = false;
-    if (playerRole === 1 && player1Connected) currentlyConnected = true;
-    if (playerRole === 2 && player2Connected) currentlyConnected = true;
-    
-    // Show reconnect button if needed
-    if (playerRole && !currentlyConnected) {
-        reconnectButton.style.display = 'inline-block';
-    } else {
-        reconnectButton.style.display = 'none';
-    }
-    
-    // Show appropriate buttons based on game state and player turn
-    if (gameActive && currentlyConnected) {
-        // Show fold button during active game
-        foldButton.style.display = 'inline-block';
-        
-        if (isPlayerTurn) {
-            if (currentPlayer === currentDefender && attackCards.length > defenseCards.length) {
-                // Defender's turn with attacks to defend
-                takeButton.style.display = 'inline-block';
-            }
-            
-            if ((currentPlayer === currentAttacker && attackCards.length > 0) || 
-                (currentPlayer === currentDefender && attackCards.length === defenseCards.length)) {
-                // Attacker with cards on table or defender who defended all attacks
-                doneButton.style.display = 'inline-block';
-            }
-        }
-    } else if (!gameActive && currentlyConnected) {
-        // Show ready button when game is not active
-        readyButton.style.display = 'inline-block';
-        
-        // Show start button if game ended and needs to be restarted
-        if (player1Connected && player2Connected) {
-            startButton.style.display = 'inline-block';
-        }
-    }
-}
-
-// Check if game has ended
-function checkGameEnd() {
-    if (!gameActive) return false;
-    
-    // Check if a player has no cards left
-    if (playerOneHand.length === 0) {
-        statusElement.textContent = "Player 1 wins! Player 2 is the durak.";
-        gameActive = false;
-        gameStarted = false;
-        waitingForPlayers = true;
-        resetReadyStates();
-        toggleControls();
-        saveGameState();
-        return true;
-    } else if (playerTwoHand.length === 0) {
-        statusElement.textContent = "Player 2 wins! Player 1 is the durak.";
-        gameActive = false;
-        gameStarted = false;
-        waitingForPlayers = true;
-        resetReadyStates();
-        toggleControls();
-        saveGameState();
-        return true;
-    }
-    
-    // Check if deck is empty and one player has no cards
-    if (deck.length === 0) {
-        // Continue the game until someone wins
-        toggleControls();
-    }
-    
-    return false;
-}
-
-// Event listeners for buttons
-takeButton.addEventListener('click', () => {
-    takeCards();
-});
-
-doneButton.addEventListener('click', () => {
-    if ((currentPlayer === currentDefender && attackCards.length === defenseCards.length) ||
-        (currentPlayer === currentAttacker && attackCards.length > 0)) {
-        endRound();
-    }
-});
-
-startButton.addEventListener('click', () => {
-    // Reset ready states
-    resetReadyStates();
-    gameStarted = false;
-    waitingForPlayers = true;
-    statusElement.textContent = "Waiting for both players to be ready...";
-    saveGameState();
-    syncGameState(); // Force sync to notify other player
-    toggleControls();
-});
-
-// Cleanup when leaving the page or closing tab
-window.addEventListener('beforeunload', () => {
-    // Only disconnect if this is the active player
-    if (playerRole === 1 && localStorage.getItem('durakPlayer1SessionId') === localStorage.getItem('durakSessionId')) {
-        localStorage.removeItem('durakPlayer1LastActive');
-        localStorage.removeItem('durakPlayer1SessionId');
-    } else if (playerRole === 2 && localStorage.getItem('durakPlayer2SessionId') === localStorage.getItem('durakSessionId')) {
-        localStorage.removeItem('durakPlayer2LastActive');
-        localStorage.removeItem('durakPlayer2SessionId');
-    }
-});
-
-// Setup storage event listener to detect changes from other tabs/windows
-window.addEventListener('storage', (event) => {
-    // If game state changed from another window
-    if (event.key === 'durakGameState_remote' || event.key === 'durakGameStateTimestamp_remote') {
-        syncGameState();
-    }
-    
-    // If player connection status changed
-    if (event.key === 'durakPlayer1LastActive' || event.key === 'durakPlayer2LastActive') {
-        checkPlayerConnections();
-    }
-    
-    // If ready states changed
-    if (event.key === 'durakPlayer1Ready' || event.key === 'durakPlayer2Ready') {
-        checkPlayerReadyStates();
-    }
-});
