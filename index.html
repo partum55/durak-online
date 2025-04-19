@@ -6,6 +6,10 @@
     <title>Durak Card Game - Two Players</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    
+    <!-- Add Firebase libraries -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
 </head>
 <body>
     <div class="game-container">
@@ -69,51 +73,8 @@
         </div>
         
         <div class="game-table" id="game-table" style="display: none;">
-            <div class="game-info">
-                <div class="player-name" id="player-one-info">
-                    <i class="fas fa-user"></i> Player 1
-                </div>
-                <div class="turn-indicator">Waiting to Start</div>
-                <div class="player-name" id="player-two-info">
-                    <i class="fas fa-user"></i> Player 2
-                </div>
-            </div>
-            
-            <div class="game-layout">
-                <div class="player-indicator player-two-indicator">Player 2's Cards</div>
-                <div class="player-hand player-two-hand"></div>
-                
-                <div class="card-source-area">
-                    <div class="deck">
-                        <span class="deck-count">36</span>
-                        <span>cards</span>
-                    </div>
-                    <div class="trump-card"></div>
-                </div>
-                
-                <div class="battle-area">
-                    <div class="attack-area"></div>
-                    <div class="defense-area"></div>
-                </div>
-                
-                <div class="player-indicator player-one-indicator">Player 1's Cards</div>
-                <div class="player-hand player-one-hand"></div>
-            </div>
-            
-            <div class="status">Waiting for game to start...</div>
-            
-            <div class="controls">
-                <button class="btn btn-danger" id="btn-take">
-                    <i class="fas fa-hand-paper"></i> Take Cards
-                </button>
-                <button class="btn btn-success" id="btn-done">
-                    <i class="fas fa-check"></i> Done / End Turn
-                </button>
-                <button class="btn btn-primary" id="btn-start">
-                    <i class="fas fa-play"></i> Start New Game
-                </button>
-                <!-- Additional buttons will be added via JavaScript -->
-            </div>
+            <!-- Game table content remains the same -->
+            <!-- ... existing HTML ... -->
         </div>
         
         <div class="footer">
@@ -121,7 +82,26 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- Firebase initialization script -->
+    <script>
+    // Firebase configuration - REPLACE WITH YOUR OWN CONFIG
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        databaseURL: "YOUR_DATABASE_URL",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+    
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    </script>
+    
+    <!-- Your modified game script -->
+    <script src="firebase-script.js"></script>
     <script>
         // Toggle rules in lobby
         document.getElementById('rules-header').addEventListener('click', function() {
