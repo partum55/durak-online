@@ -1,0 +1,352 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #1e7e34;
+    color: white;
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+}
+
+.game-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.game-table {
+    background-color: #28a745;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    margin-bottom: 20px;
+    position: relative;
+    min-height: 300px;
+}
+
+.deck {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    width: 80px;
+    height: 120px;
+    background-color: #fff;
+    border-radius: 5px;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+    color: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.trump-card {
+    position: absolute;
+    left: 35px;
+    top: 30px;
+    transform: rotate(90deg);
+}
+
+.battle-area {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px;
+    margin: 20px auto;
+    min-height: 150px;
+}
+
+.attack-area, .defense-area {
+    display: flex;
+    gap: 10px;
+    min-height: 120px;
+}
+
+.card-pair {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.player-hand {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 20px 0;
+    min-height: 120px;
+}
+
+.player-one-hand {
+    margin-top: 30px;
+}
+
+.player-two-hand {
+    margin-bottom: 30px;
+}
+
+.card {
+    width: 70px;
+    height: 105px;
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 5px;
+    color: black;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s;
+    position: relative;
+}
+
+.card:hover {
+    transform: translateY(-10px);
+}
+
+.red {
+    color: #d9534f;
+}
+
+.black {
+    color: #000;
+}
+
+.card-value {
+    font-size: 1.2rem;
+}
+
+.card-center {
+    font-size: 2rem;
+    align-self: center;
+}
+
+.card-value-bottom {
+    font-size: 1.2rem;
+    align-self: flex-end;
+    transform: rotate(180deg);
+}
+
+.controls {
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 8px 16px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    color: white;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.btn-success {
+    background-color: #28a745;
+    color: white;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.hidden {
+    display: none;
+}
+
+.status {
+    margin-top: 10px;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+.card-back {
+    background-color: #0d6efd;
+    background-image: linear-gradient(45deg, #0d6efd 25%, #0a58ca 25%, #0a58ca 50%, #0d6efd 50%, #0d6efd 75%, #0a58ca 75%, #0a58ca);
+    background-size: 20px 20px;
+}
+
+.player-indicator {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin: 10px 0;
+    font-weight: bold;
+}
+
+.player-one-indicator {
+    background-color: #007bff;
+}
+
+.player-two-indicator {
+    background-color: #dc3545;
+}
+
+.turn-indicator {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    background-color: #ffc107;
+    color: #212529;
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.player-select {
+    margin: 20px 0;
+    padding: 20px;
+    background-color: #1a6e2d;
+    border-radius: 15px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+.player-select h2 {
+    margin-top: 0;
+}
+
+.game-id {
+    font-size: 1.2rem;
+    margin: 10px 0;
+    padding: 10px;
+    background-color: #28a745;
+    border-radius: 5px;
+    display: inline-block;
+}
+
+.player-buttons {
+    margin: 20px 0;
+}
+
+.game-info {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+    margin-bottom: 15px;
+}
+
+.player-name {
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+#player-one-info {
+    color: #007bff;
+}
+
+#player-two-info {
+    color: #dc3545;
+}
+
+.active-player {
+    text-decoration: underline;
+}
+
+#connection-info {
+    margin: 20px 0;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+}
+
+.connection-status {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.auto-sync {
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.auto-sync input {
+    margin-right: 5px;
+}
+
+.sync-message {
+    font-size: 0.9rem;
+    margin-top: 5px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.sync-button {
+    margin-top: 10px;
+}
+
+.players-connected {
+    display: flex;
+    justify-content: center;
+    margin-top: 15px;
+    gap: 10px;
+}
+
+.player-status {
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.player-connected {
+    background-color: #28a745;
+}
+
+.player-disconnected {
+    background-color: #6c757d;
+    opacity: 0.7;
+}
+
+@media (max-width: 600px) {
+    .card {
+        width: 60px;
+        height: 90px;
+        font-size: 0.9rem;
+    }
+    
+    .card-value {
+        font-size: 1rem;
+    }
+    
+    .card-center {
+        font-size: 1.6rem;
+    }
+    
+    .card-value-bottom {
+        font-size: 1rem;
+    }
+    
+    .turn-indicator {
+        position: static;
+        margin: 10px auto;
+        max-width: 200px;
+    }
+    
+    .deck {
+        position: static;
+        margin: 10px auto;
+    }
+    
+    .trump-card {
+        position: static;
+        transform: none;
+        margin: 10px auto;
+    }
+}
